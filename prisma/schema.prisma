@@ -1,0 +1,371 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------
+// Enums
+// -----------------------------
+
+enum CompanyRole {
+  OWNER
+  ADMIN
+  BILLING
+  AUDITOR
+  MEMBER
+}
+
+enum WorkspaceRole {
+  ADMIN
+  DEVELOPER
+  VIEWER
+}
+
+enum PlanTier {
+  FREE
+  STARTER
+  GROWTH
+  SCALE
+  ENTERPRISE
+}
+
+enum MeterType {
+  EVENTS
+  WORKSPACES
+  USERS
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+// -----------------------------
+// Better Auth v1.x compatible models
+// -----------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  email         String  @unique
+  emailVerified Boolean @default(false)
+  name          String?
+  image         String?
+
+  passwordHash String? // needed if offering credentials login
+
+  accounts      Account[]
+  sessions      Session[]
+  verifications Verification[]
+
+  // HyreLog domain relations
+  companyUsers   CompanyUser[]
+  workspaceUsers WorkspaceUser[]
+}
+
+model Account {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId                String
+  providerId            String
+  accountId             String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  userAgent String?
+  ipAddress String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Verification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+}
+
+// -----------------------------
+// Core domain (Company / Workspace / ApiKey / Event)
+// -----------------------------
+
+model Company {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name String
+  slug String @unique
+
+  // Billing plan + usage limits
+  planTier        PlanTier        @default(FREE)
+  billingInterval BillingInterval @default(MONTHLY)
+
+  eventsPerMonth Int @default(50000)
+  workspaceLimit Int @default(2)
+  userLimit      Int @default(2)
+  retentionDays  Int @default(7)
+
+  stripeCustomerId String?
+
+  // Relations
+  workspaces    Workspace[]
+  companyUsers  CompanyUser[]
+  billingMeters BillingMeter[]
+  usageStats    UsageStats[]
+  subscriptions StripeSubscription[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name String
+  slug String @unique
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  events  Event[]
+  apiKeys ApiKey[]
+
+  workspaceUsers WorkspaceUser[]
+  billingMeters  BillingMeter[]
+  usageStats     UsageStats[]
+  subscriptions  StripeSubscription[]
+
+  @@index([companyId])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  timestamp DateTime @default(now())
+
+  workspaceId String
+
+  type       String
+  actorId    String?
+  actorType  String?
+  actorName  String?
+  actorEmail String?
+
+  sourceIp  String?
+  userAgent String?
+
+  metadata Json?
+  before   Json?
+  after    Json?
+
+  chainId  String
+  hash     String
+  prevHash String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  apiKey    ApiKey?   @relation(fields: [apiKeyId], references: [id])
+  apiKeyId  String?
+
+  @@index([workspaceId, timestamp])
+  @@index([workspaceId, type])
+  @@index([workspaceId, actorId])
+  @@index([chainId])
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name      String
+  keyPrefix String @unique
+  hashedKey String
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  lastUsedAt DateTime?
+  revoked    Boolean   @default(false)
+
+  events Event[]
+
+  @@index([workspaceId])
+}
+
+// -----------------------------
+// RBAC models
+// -----------------------------
+
+model CompanyUser {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  userId    String
+  role      CompanyRole @default(MEMBER)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+model WorkspaceUser {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(VIEWER)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// -----------------------------
+// Billing / Usage
+// -----------------------------
+
+model BillingMeter {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId   String
+  workspaceId String?
+
+  meterType   MeterType
+  periodStart DateTime
+  periodEnd   DateTime
+
+  currentValue    Int       @default(0)
+  softThreshold   Int?
+  hardCap         Boolean   @default(true)
+  unitSize        Int       @default(100000)
+  unitPrice       Float     @default(0)
+  lastIncrementAt DateTime?
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+
+  @@unique([companyId, workspaceId, meterType, periodStart])
+  @@index([companyId, meterType])
+  @@index([workspaceId])
+}
+
+model UsageStats {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId   String
+  workspaceId String?
+  date        DateTime
+
+  eventsIngested Int @default(0)
+  eventsStored   Int @default(0)
+  seats          Int @default(0)
+  activeApiKeys  Int @default(0)
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+
+  @@unique([companyId, workspaceId, date])
+}
+
+// -----------------------------
+// Stripe Subscriptions
+// -----------------------------
+
+model StripeSubscription {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  stripeCustomerId     String
+  stripeSubscriptionId String             @unique
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?
+
+  planTier        PlanTier
+  billingInterval BillingInterval
+
+  items       StripeSubscriptionItem[]
+  workspace   Workspace?               @relation(fields: [workspaceId], references: [id])
+  workspaceId String?
+
+  @@index([companyId])
+}
+
+model StripeSubscriptionItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptionId String
+  subscription   StripeSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  stripePriceId            String
+  stripeSubscriptionItemId String @unique
+  quantity                 Int
+
+  @@index([subscriptionId])
+}
