@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -39,6 +37,7 @@ enum MeterType {
   EVENTS
   WORKSPACES
   USERS
+  EXPORTS
 }
 
 enum BillingInterval {
@@ -56,8 +55,13 @@ enum SubscriptionStatus {
   UNPAID
 }
 
+enum ApiKeyScope {
+  COMPANY
+  WORKSPACE
+}
+
 // -----------------------------
-// Better Auth v1.x compatible models
+// Auth (used by Next.js app, not this API)
 // -----------------------------
 
 model User {
@@ -70,13 +74,12 @@ model User {
   name          String?
   image         String?
 
-  passwordHash String? // needed if offering credentials login
+  passwordHash String?
 
   accounts      Account[]
   sessions      Session[]
   verifications Verification[]
 
-  // HyreLog domain relations
   companyUsers   CompanyUser[]
   workspaceUsers WorkspaceUser[]
 }
@@ -132,7 +135,61 @@ model Verification {
 }
 
 // -----------------------------
-// Core domain (Company / Workspace / ApiKey / Event)
+// Plans / Add-ons (front-end managed)
+// -----------------------------
+
+model Plan {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  slug        String  @unique
+  description String?
+
+  eventsPerMonth    Int
+  exportsPerMonth   Int
+  retentionDays     Int
+  priceMonthlyCents Int
+  priceYearlyCents  Int
+
+  companies Company[]
+}
+
+model AddOn {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  slug        String  @unique
+  description String?
+
+  extraEventsPerMonth  Int @default(0)
+  extraExportsPerMonth Int @default(0)
+
+  priceMonthlyCents Int
+
+  companyAddOns CompanyAddOn[]
+}
+
+model CompanyAddOn {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  addOnId   String
+  active    Boolean @default(true)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  addOn   AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, addOnId])
+}
+
+// -----------------------------
+// Core domain: Company / Workspace / Event / ApiKey
 // -----------------------------
 
 model Company {
@@ -143,14 +200,23 @@ model Company {
   name String
   slug String @unique
 
-  // Billing plan + usage limits
+  // Plan linkage
   planTier        PlanTier        @default(FREE)
+  planId          String?
+  plan            Plan?           @relation(fields: [planId], references: [id])
   billingInterval BillingInterval @default(MONTHLY)
 
-  eventsPerMonth Int @default(50000)
-  workspaceLimit Int @default(2)
-  userLimit      Int @default(2)
-  retentionDays  Int @default(7)
+  // Effective limits (can be overridden per company)
+  eventsPerMonth     Int     @default(50000)
+  exportsPerMonth    Int     @default(0)
+  retentionDays      Int     @default(7)
+  unlimitedRetention Boolean @default(false)
+
+  // Warning thresholds (managed in dashboard)
+  eventsWarningPercent   Int?
+  eventsWarningAbsolute  Int?
+  exportsWarningPercent  Int?
+  exportsWarningAbsolute Int?
 
   stripeCustomerId String?
 
@@ -160,6 +226,9 @@ model Company {
   billingMeters BillingMeter[]
   usageStats    UsageStats[]
   subscriptions StripeSubscription[]
+  apiKeys       ApiKey[]
+  companyAddOns CompanyAddOn[]
+  apiKeyLogs    ApiKeyLog[]
 }
 
 model Workspace {
@@ -180,6 +249,7 @@ model Workspace {
   billingMeters  BillingMeter[]
   usageStats     UsageStats[]
   subscriptions  StripeSubscription[]
+  apiKeyLogs     ApiKeyLog[]
 
   @@index([companyId])
 }
@@ -209,8 +279,6 @@ model Event {
   prevHash String?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
-  apiKey    ApiKey?   @relation(fields: [apiKeyId], references: [id])
-  apiKeyId  String?
 
   @@index([workspaceId, timestamp])
   @@index([workspaceId, type])
@@ -223,23 +291,51 @@ model ApiKey {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name      String
+  name  String
+  scope ApiKeyScope @default(WORKSPACE)
+
   keyPrefix String @unique
   hashedKey String
 
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
 
   lastUsedAt DateTime?
   revoked    Boolean   @default(false)
 
-  events Event[]
+  logs ApiKeyLog[]
+}
 
+model ApiKeyLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  apiKeyId    String
+  companyId   String
+  workspaceId String?
+
+  method     String
+  path       String
+  statusCode Int
+  durationMs Int?
+
+  ip        String?
+  userAgent String?
+
+  apiKey    ApiKey     @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+
+  @@index([apiKeyId])
+  @@index([companyId])
   @@index([workspaceId])
 }
 
 // -----------------------------
-// RBAC models
+// RBAC (Dashboard-only)
 // -----------------------------
 
 model CompanyUser {
@@ -318,6 +414,7 @@ model UsageStats {
   eventsStored   Int @default(0)
   seats          Int @default(0)
   activeApiKeys  Int @default(0)
+  exportsRun     Int @default(0)
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id])
@@ -326,7 +423,7 @@ model UsageStats {
 }
 
 // -----------------------------
-// Stripe Subscriptions
+// Stripe (optional, dashboard side)
 // -----------------------------
 
 model StripeSubscription {
@@ -358,7 +455,7 @@ model StripeSubscription {
 model StripeSubscriptionItem {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   subscriptionId String
   subscription   StripeSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)

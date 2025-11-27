@@ -1,14 +1,10 @@
-// src/routes/events/explorer.ts
+// src/routes/events/export.ts
 
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../lib/prisma';
-import { EventQuerySchema } from '../../schemas/events';
-import { paginate } from '../../utils/pagination';
+import { EventExportSchema } from '../../schemas/events';
 
-const WORKSPACE_DEFAULT_LIMIT = 200;
-const WORKSPACE_MAX_LIMIT = 500;
-const COMPANY_DEFAULT_LIMIT = 100;
-const COMPANY_MAX_LIMIT = 250;
+const MAX_EXPORT_EVENTS = 10_000;
 
 function applyRetention(company: any, from?: Date) {
     if (company.unlimitedRetention) return from;
@@ -17,20 +13,23 @@ function applyRetention(company: any, from?: Date) {
     return from && from > cutoff ? from : cutoff;
 }
 
-export async function eventExplorerRoutes(fastify: FastifyInstance) {
+export async function eventExportRoutes(fastify: FastifyInstance) {
     fastify.get(
-        '/v1/events',
+        '/v1/events/export',
         {
-            preHandler: fastify.authenticate,
+            preHandler: [
+                fastify.authenticate,
+                fastify.enforceCompanyMeter('EXPORTS')
+            ],
             config: {
                 rateLimit: {
-                    max: 60,
+                    max: 10,
                     timeWindow: '1 minute'
                 }
             }
         },
         async (request, reply) => {
-            const parsed = EventQuerySchema.safeParse(request.query);
+            const parsed = EventExportSchema.safeParse(request.query);
             if (!parsed.success) {
                 return reply.code(400).send({ error: parsed.error.flatten() });
             }
@@ -40,19 +39,17 @@ export async function eventExplorerRoutes(fastify: FastifyInstance) {
                 companyId,
                 workspaceId: apiWorkspaceId
             } = request.auth!;
-            const { workspaceId, type, actorId, from, to, q, cursor, limit } =
+            const { workspaceId, format, type, actorId, from, to, q } =
                 parsed.data;
 
-            // patched: safe rateLimit access
             const cfg = request.routeOptions.config;
             if (cfg.rateLimit) {
-                cfg.rateLimit.max = scope === 'WORKSPACE' ? 120 : 60;
+                cfg.rateLimit.max = scope === 'WORKSPACE' ? 20 : 10;
             }
 
             const company = await prisma.company.findUnique({
                 where: { id: companyId }
             });
-
             if (!company)
                 return reply.code(404).send({ error: 'Company not found' });
 
@@ -91,32 +88,51 @@ export async function eventExplorerRoutes(fastify: FastifyInstance) {
                 ];
             }
 
-            const rawLimit =
-                limit ??
-                (scope === 'WORKSPACE'
-                    ? WORKSPACE_DEFAULT_LIMIT
-                    : COMPANY_DEFAULT_LIMIT);
-            const maxLimit =
-                scope === 'WORKSPACE' ? WORKSPACE_MAX_LIMIT : COMPANY_MAX_LIMIT;
-
-            const take = Math.min(Math.max(rawLimit, 1), maxLimit);
-
-            const page = await paginate({
-                model: prisma.event,
+            const events = await prisma.event.findMany({
                 where,
                 orderBy: { timestamp: 'desc' },
-                cursor: cursor ?? null,
-                limit: take
+                take: MAX_EXPORT_EVENTS + 1
             });
 
-            return reply.send({
-                data: page.data,
-                nextCursor: page.nextCursor,
-                pagination: {
-                    limit: take,
-                    nextCursor: page.nextCursor
-                }
-            });
+            const slice = events.slice(0, MAX_EXPORT_EVENTS);
+
+            await fastify.incrementCompanyMeter(
+                'EXPORTS',
+                companyId,
+                null,
+                slice.length
+            );
+
+            if (events.length > MAX_EXPORT_EVENTS) {
+                reply.header('X-HyreLog-Truncated', 'true');
+            }
+
+            if (format === 'csv') {
+                reply.header('Content-Type', 'text/csv');
+                const header =
+                    'id,timestamp,type,actorId,actorName,actorEmail\n';
+                const csv = slice
+                    .map((e) =>
+                        [
+                            e.id,
+                            e.timestamp.toISOString(),
+                            e.type,
+                            e.actorId ?? '',
+                            e.actorName ?? '',
+                            e.actorEmail ?? ''
+                        ].join(',')
+                    )
+                    .join('\n');
+                return reply.send(header + csv);
+            }
+
+            if (format === 'ndjson') {
+                reply.header('Content-Type', 'application/x-ndjson');
+                const nd = slice.map((e) => JSON.stringify(e)).join('\n');
+                return reply.send(nd);
+            }
+
+            return reply.send({ data: slice });
         }
     );
 }

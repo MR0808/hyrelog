@@ -1,76 +1,148 @@
 // src/routes/workspaces.ts
+
 import { FastifyInstance } from 'fastify';
-import GithubSlugger from 'github-slugger';
-import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 
-const createWorkspaceSchema = z.object({
-    name: z.string().min(1),
-    slug: z.string().min(1).optional()
-});
+const COMPANY_DEFAULT_LIMIT = 50;
+const COMPANY_MAX_LIMIT = 250;
 
-async function generateWorkspaceSlug(name: string, customSlug?: string) {
-    const slugger = new GithubSlugger();
-
-    const base = customSlug ? slugger.slug(customSlug) : slugger.slug(name);
-
-    let slug = base;
-    let i = 1;
-
-    // Try base, then base-2, base-3, ... until free
-    // (GitHub-style behaviour)
-    // NOTE: This still relies on DB unique constraint for race conditions.
-    // For most SMB usage it's totally fine.
-    // If you hit P2002, you can retry once at the route level.
-    // For now, we just pre-check.
-    // This is what you asked about re: "find a slug that doesn't exist".
-    /* eslint-disable no-constant-condition */
-    while (true) {
-        const existing = await prisma.workspace.findUnique({
-            where: { slug },
-            select: { id: true }
-        });
-
-        if (!existing) return slug;
-
-        i += 1;
-        slug = `${base}-${i}`;
-    }
-}
-
-export async function registerWorkspaceRoutes(fastify: FastifyInstance) {
-    // Create workspace
-    fastify.post('/v1/workspaces', async (request, reply) => {
-        const parseResult = createWorkspaceSchema.safeParse(request.body);
-
-        if (!parseResult.success) {
-            reply.code(400).send({
-                error: 'Invalid body',
-                details: parseResult.error.flatten()
-            });
-            return;
-        }
-
-        const { name, slug } = parseResult.data;
-
-        const resolvedSlug = await generateWorkspaceSlug(name, slug);
-
-        const workspace = await prisma.workspace.create({
-            data: {
-                name,
-                slug: resolvedSlug
+export async function workspaceRoutes(fastify: FastifyInstance) {
+    fastify.get(
+        '/v1/workspaces',
+        {
+            preHandler: fastify.authenticate,
+            config: {
+                rateLimit: {
+                    max: 30,
+                    timeWindow: '1 minute'
+                }
             }
-        });
+        },
+        async (request, reply) => {
+            const {
+                scope,
+                companyId,
+                workspaceId: apiWorkspaceId
+            } = request.auth!;
+            const q = request.query as any;
 
-        reply.code(201).send(workspace);
-    });
+            // adjust rate limit per scope
+            const cfg = request.routeOptions.config;
+            if (cfg.rateLimit) {
+                cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 30;
+            }
 
-    // List workspaces (for your Next.js admin/dashboard)
-    fastify.get('/v1/workspaces', async (_request, _reply) => {
-        const workspaces = await prisma.workspace.findMany({
-            orderBy: { createdAt: 'desc' }
-        });
+            // -----------------------
+            // WORKSPACE SCOPED
+            // -----------------------
+            if (scope === 'WORKSPACE') {
+                if (!apiWorkspaceId) {
+                    return reply.code(403).send({
+                        error: 'Invalid workspace API key (missing workspaceId)'
+                    });
+                }
 
-        return { data: workspaces };
-    });
+                const ws = await prisma.workspace.findFirst({
+                    where: { id: apiWorkspaceId, companyId }
+                });
+
+                return reply.send({
+                    data: ws ? [ws] : [],
+                    pagination: {
+                        total: ws ? 1 : 0,
+                        limit: 1,
+                        nextCursor: null
+                    }
+                });
+            }
+
+            // -----------------------
+            // COMPANY SCOPED
+            // -----------------------
+            const rawLimit = Number(q.limit ?? COMPANY_DEFAULT_LIMIT);
+            const limit = Math.min(Math.max(rawLimit, 1), COMPANY_MAX_LIMIT);
+
+            const cursor = q.cursor ? { id: q.cursor } : undefined;
+
+            const batch = await prisma.workspace.findMany({
+                where: { companyId },
+                take: limit + 1,
+                cursor,
+                orderBy: { createdAt: 'desc' }
+            });
+
+            const hasMore = batch.length > limit;
+            const items = hasMore ? batch.slice(0, limit) : batch;
+            const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+            return reply.send({
+                data: items,
+                pagination: {
+                    limit,
+                    nextCursor
+                }
+            });
+        }
+    );
+
+    // --------------------------------------------------------
+    // GET /v1/workspaces/:workspaceId
+    // --------------------------------------------------------
+    fastify.get(
+        '/v1/workspaces/:workspaceId',
+        {
+            preHandler: fastify.authenticate,
+            config: {
+                rateLimit: {
+                    max: 20,
+                    timeWindow: '1 minute'
+                }
+            }
+        },
+        async (request, reply) => {
+            const {
+                scope,
+                companyId,
+                workspaceId: apiWorkspaceId
+            } = request.auth!;
+            const { workspaceId } = request.params as { workspaceId: string };
+
+            const cfg = request.routeOptions.config;
+            if (cfg.rateLimit) {
+                cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 20;
+            }
+
+            if (scope === 'WORKSPACE' && apiWorkspaceId !== workspaceId) {
+                return reply.code(403).send({
+                    error: 'Forbidden: workspace API key cannot view other workspaces'
+                });
+            }
+
+            const ws = await prisma.workspace.findFirst({
+                where: { id: workspaceId, companyId }
+            });
+
+            if (!ws)
+                return reply.code(404).send({ error: 'Workspace not found' });
+
+            const eventCount = await prisma.event.count({
+                where: { workspaceId }
+            });
+
+            const lastEvent = await prisma.event.findFirst({
+                where: { workspaceId },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            return reply.send({
+                data: {
+                    ...ws,
+                    stats: {
+                        eventCount,
+                        lastEventAt: lastEvent?.timestamp ?? null
+                    }
+                }
+            });
+        }
+    );
 }

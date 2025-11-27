@@ -1,32 +1,14 @@
-// src/types/fastify.d.ts
-import 'fastify';
-import { CompanyRole, WorkspaceRole } from '@prisma/client';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 declare module 'fastify' {
     interface FastifyRequest {
-        // API key auth (ingest)
         auth?: {
-            workspaceId: string;
             apiKeyId: string;
-        };
-
-        // User auth (dashboard / company APIs)
-        user?: {
-            id: string;
-            email: string;
-        } | null;
-
-        // Company RBAC
-        companyContext?: {
+            scope: 'COMPANY' | 'WORKSPACE';
             companyId: string;
-            role: CompanyRole;
+            workspaceId?: string | null;
         };
-
-        // Workspace RBAC
-        workspaceContext?: {
-            workspaceId: string;
-            role: WorkspaceRole;
-        };
+        startTime?: number;
     }
 
     interface FastifyInstance {
@@ -34,12 +16,19 @@ declare module 'fastify' {
             request: FastifyRequest,
             reply: FastifyReply
         ): Promise<void>;
-
-        // RBAC guards
-        requireCompanyRole(roles: CompanyRole[]): any;
-        requireWorkspaceRole(roles: WorkspaceRole[]): any;
-
-        // Usage caps
-        enforceMeter(meter: 'EVENTS' | 'WORKSPACES' | 'USERS'): any;
+        logApiKeyRequest(
+            request: FastifyRequest,
+            reply: FastifyReply,
+            durationMs: number
+        ): Promise<void>;
+        enforceCompanyMeter(
+            meter: 'EVENTS' | 'EXPORTS'
+        ): (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+        incrementCompanyMeter(
+            meter: 'EVENTS' | 'EXPORTS',
+            companyId: string,
+            workspaceId?: string | null,
+            amount?: number
+        ): Promise<void>;
     }
 }

@@ -1,55 +1,67 @@
 // src/server.ts
-import 'dotenv/config';
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
 
-import authPlugin from './plugins/auth';
-import { registerWorkspaceRoutes } from './routes/workspaces';
-import { registerApiKeyRoutes } from './routes/apiKeys';
-import { registerEventRoutes } from './routes/events';
+import apiKeyAuth from './plugins/api-key-auth';
+import usagePlugin from './plugins/usage-and-logging';
 
-const server = Fastify({
-    logger: true
-});
+import { companyRoutes } from './routes/company';
+import { workspaceRoutes } from './routes/workspaces';
+import { eventIngestRoutes } from './routes/events/ingest';
+import { eventExplorerRoutes } from './routes/events/explorer';
+import { eventExportRoutes } from './routes/events/export';
 
-async function buildServer() {
-    // Core plugins
-    await server.register(cors);
-    await server.register(helmet);
-    await server.register(rateLimit, {
-        max: 1000,
-        timeWindow: '1 minute'
+export async function buildServer() {
+    const fastify = Fastify({
+        logger: true
     });
 
-    // Auth (API key)
-    await server.register(authPlugin);
+    // ---------------------------
+    // Security & middleware
+    // ---------------------------
+    await fastify.register(cors);
+    await fastify.register(helmet);
 
-    // Health check
-    server.get('/health', async () => {
-        return { status: 'ok' };
+    await fastify.register(apiKeyAuth);
+    await fastify.register(usagePlugin);
+
+    // Track response time for ApiKeyLog
+    fastify.addHook('onRequest', async (req) => {
+        req.startTime = Date.now();
     });
 
-    // Domain routes
-    await registerWorkspaceRoutes(server);
-    await registerApiKeyRoutes(server);
-    await registerEventRoutes(server);
+    fastify.addHook('onResponse', async (req, reply) => {
+        const end = Date.now();
+        const duration = req.startTime ? end - req.startTime : 0;
+        await fastify.logApiKeyRequest(req, reply, duration);
+    });
 
-    return server;
+    // ---------------------------
+    // Route registration
+    // ---------------------------
+    await fastify.register(companyRoutes);
+    await fastify.register(workspaceRoutes);
+    await fastify.register(eventIngestRoutes);
+    await fastify.register(eventExplorerRoutes);
+    await fastify.register(eventExportRoutes);
+
+    return fastify;
 }
 
-async function start() {
-    try {
-        await buildServer();
-        const port = Number(process.env.PORT) || 3000;
-
-        await server.listen({ port, host: '0.0.0.0' });
-        console.log(`🚀 Server listening on http://localhost:${port}`);
-    } catch (err) {
-        server.log.error(err);
-        process.exit(1);
-    }
+// ---------------------------------------------
+// Start server if running directly
+// ---------------------------------------------
+if (require.main === module) {
+    (async () => {
+        const app = await buildServer();
+        app.listen({ port: 3001 }, (err) => {
+            if (err) {
+                console.error(err);
+                process.exit(1);
+            }
+            console.log('HyreLog Data API running at http://localhost:3001');
+        });
+    })();
 }
-
-start();
