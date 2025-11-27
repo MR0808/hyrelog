@@ -1,0 +1,40 @@
+{
+    "name": "@hyrelog/sdk",
+    "version": "0.1.0",
+    "description": "Official TypeScript/JavaScript SDK for the HyreLog Audit Trail API",
+    "main": "dist/index.cjs",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.cjs",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "sideEffects": false,
+    "scripts": {
+        "build": "tsup src/index.ts --dts --format cjs,esm --clean",
+        "dev": "tsup src/index.ts --dts --format cjs,esm --watch",
+        "lint": "eslint . --ext .ts,.tsx",
+        "test": "vitest"
+    },
+    "keywords": [
+        "hyrelog",
+        "audit-log",
+        "logging",
+        "api",
+        "sdk",
+        "typescript"
+    ],
+    "author": "HyreLog",
+    "license": "MIT",
+    "dependencies": {},
+    "peerDependencies": {
+        "typescript": ">=5.0.0"
+    },
+    "devDependencies": {
+        "tsup": "^8.0.0",
+        "typescript": "^5.7.0"
+    }
+}

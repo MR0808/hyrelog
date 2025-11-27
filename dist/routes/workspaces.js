@@ -1,13 +1,30 @@
 "use strict";
-// src/routes/workspaces.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.workspaceRoutes = workspaceRoutes;
-const prisma_1 = require("../lib/prisma");
+exports.default = workspaceRoutes;
+const warnings_1 = require("../metering/workspace/warnings");
+const WORKSPACE_DEFAULT_LIMIT = 200;
+const WORKSPACE_MAX_LIMIT = 500;
 const COMPANY_DEFAULT_LIMIT = 50;
 const COMPANY_MAX_LIMIT = 250;
 async function workspaceRoutes(fastify) {
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces
+     * Company key → all workspaces
+     * Workspace key → one workspace
+     * ---------------------------------------------------------
+     */
     fastify.get('/v1/workspaces', {
-        preHandler: fastify.authenticate,
+        schema: {
+            querystring: {
+                type: 'object',
+                properties: {
+                    cursor: { type: 'string' },
+                    limit: { type: ['string', 'number'] }
+                },
+                additionalProperties: true
+            }
+        },
         config: {
             rateLimit: {
                 max: 30,
@@ -15,99 +32,154 @@ async function workspaceRoutes(fastify) {
             }
         }
     }, async (request, reply) => {
-        const { scope, companyId, workspaceId: apiWorkspaceId } = request.auth;
-        const q = request.query;
-        // adjust rate limit per scope
-        const cfg = request.routeOptions.config;
-        if (cfg.rateLimit) {
-            cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 30;
-        }
-        // -----------------------
-        // WORKSPACE SCOPED
-        // -----------------------
-        if (scope === 'WORKSPACE') {
-            if (!apiWorkspaceId) {
-                return reply.code(403).send({
-                    error: 'Invalid workspace API key (missing workspaceId)'
-                });
-            }
-            const ws = await prisma_1.prisma.workspace.findFirst({
-                where: { id: apiWorkspaceId, companyId }
+        const auth = request.auth;
+        if (!auth)
+            return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+        const prisma = fastify.prisma;
+        const rawLimit = request.query.limit;
+        let limit = rawLimit !== undefined
+            ? Number(rawLimit)
+            : auth.scope === 'COMPANY'
+                ? COMPANY_DEFAULT_LIMIT
+                : WORKSPACE_DEFAULT_LIMIT;
+        limit =
+            auth.scope === 'COMPANY'
+                ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
+                : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
+        const cursor = request.query.cursor;
+        if (auth.scope === 'COMPANY') {
+            const workspaces = await prisma.workspace.findMany({
+                where: { companyId: auth.companyId },
+                take: limit,
+                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+                orderBy: { createdAt: 'asc' }
             });
+            const nextCursor = workspaces.length === limit
+                ? workspaces[workspaces.length - 1].id
+                : null;
             return reply.send({
-                data: ws ? [ws] : [],
-                pagination: {
-                    total: ws ? 1 : 0,
-                    limit: 1,
-                    nextCursor: null
-                }
+                data: workspaces,
+                nextCursor
             });
         }
-        // -----------------------
-        // COMPANY SCOPED
-        // -----------------------
-        const rawLimit = Number(q.limit ?? COMPANY_DEFAULT_LIMIT);
-        const limit = Math.min(Math.max(rawLimit, 1), COMPANY_MAX_LIMIT);
-        const cursor = q.cursor ? { id: q.cursor } : undefined;
-        const batch = await prisma_1.prisma.workspace.findMany({
-            where: { companyId },
-            take: limit + 1,
-            cursor,
-            orderBy: { createdAt: 'desc' }
+        // Workspace scoped: only its own workspace
+        const ws = await prisma.workspace.findUnique({
+            where: { id: auth.workspaceId }
         });
-        const hasMore = batch.length > limit;
-        const items = hasMore ? batch.slice(0, limit) : batch;
-        const nextCursor = hasMore ? items[items.length - 1].id : null;
         return reply.send({
-            data: items,
-            pagination: {
-                limit,
-                nextCursor
-            }
+            data: ws ? [ws] : [],
+            nextCursor: null
         });
     });
-    // --------------------------------------------------------
-    // GET /v1/workspaces/:workspaceId
-    // --------------------------------------------------------
-    fastify.get('/v1/workspaces/:workspaceId', {
-        preHandler: fastify.authenticate,
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces/:id
+     * Scoping rules applied
+     * ---------------------------------------------------------
+     */
+    fastify.get('/v1/workspaces/:id', {
         config: {
             rateLimit: {
-                max: 20,
+                max: 30,
                 timeWindow: '1 minute'
             }
         }
     }, async (request, reply) => {
-        const { scope, companyId, workspaceId: apiWorkspaceId } = request.auth;
-        const { workspaceId } = request.params;
-        const cfg = request.routeOptions.config;
-        if (cfg.rateLimit) {
-            cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 20;
-        }
-        if (scope === 'WORKSPACE' && apiWorkspaceId !== workspaceId) {
-            return reply.code(403).send({
-                error: 'Forbidden: workspace API key cannot view other workspaces'
-            });
-        }
-        const ws = await prisma_1.prisma.workspace.findFirst({
-            where: { id: workspaceId, companyId }
+        const auth = request.auth;
+        if (!auth)
+            return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+        const prisma = fastify.prisma;
+        const { id } = request.params;
+        const ws = await prisma.workspace.findUnique({
+            where: { id }
         });
         if (!ws)
-            return reply.code(404).send({ error: 'Workspace not found' });
-        const eventCount = await prisma_1.prisma.event.count({
-            where: { workspaceId }
+            return reply.status(404).send({ error: 'WORKSPACE_NOT_FOUND' });
+        if (auth.scope === 'WORKSPACE' && auth.workspaceId !== ws.id) {
+            return reply.status(403).send({ error: 'FORBIDDEN' });
+        }
+        if (auth.scope === 'COMPANY' && ws.companyId !== auth.companyId) {
+            return reply.status(403).send({ error: 'FORBIDDEN' });
+        }
+        const latestDaily = await prisma.usageStatsWorkspace.findFirst({
+            where: {
+                companyId: ws.companyId,
+                workspaceId: ws.id
+            },
+            orderBy: { date: 'desc' }
         });
-        const lastEvent = await prisma_1.prisma.event.findFirst({
-            where: { workspaceId },
-            orderBy: { timestamp: 'desc' }
+        const latestEventsMeter = await prisma.billingMeterWorkspace.findFirst({
+            where: {
+                companyId: ws.companyId,
+                workspaceId: ws.id
+            },
+            orderBy: { periodStart: 'desc' }
         });
+        const warnings = await (0, warnings_1.getWorkspaceWarnings)(ws.companyId, ws.id);
         return reply.send({
             data: {
-                ...ws,
-                stats: {
-                    eventCount,
-                    lastEventAt: lastEvent?.timestamp ?? null
+                workspace: ws,
+                usage: {
+                    latestDaily,
+                    latestEventsMeter,
+                    warnings
                 }
+            }
+        });
+    });
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces/:id/usage
+     * Workspace usage snapshot (90 days)
+     * ---------------------------------------------------------
+     */
+    fastify.get('/v1/workspaces/:id/usage', {
+        config: {
+            rateLimit: {
+                max: 30,
+                timeWindow: '1 minute'
+            }
+        }
+    }, async (request, reply) => {
+        const auth = request.auth;
+        if (!auth)
+            return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+        const prisma = fastify.prisma;
+        const { id } = request.params;
+        const ws = await prisma.workspace.findUnique({
+            where: { id }
+        });
+        if (!ws) {
+            return reply.status(404).send({ error: 'WORKSPACE_NOT_FOUND' });
+        }
+        if (auth.scope === 'WORKSPACE' && auth.workspaceId !== id) {
+            return reply.status(403).send({ error: 'FORBIDDEN' });
+        }
+        if (auth.scope === 'COMPANY' && ws.companyId !== auth.companyId) {
+            return reply.status(403).send({ error: 'FORBIDDEN' });
+        }
+        const meters = await prisma.billingMeterWorkspace.findMany({
+            where: {
+                companyId: ws.companyId,
+                workspaceId: ws.id
+            },
+            orderBy: { periodStart: 'desc' }
+        });
+        const daily = await prisma.usageStatsWorkspace.findMany({
+            where: {
+                companyId: ws.companyId,
+                workspaceId: ws.id
+            },
+            orderBy: { date: 'desc' },
+            take: 90
+        });
+        const warnings = await (0, warnings_1.getWorkspaceWarnings)(ws.companyId, ws.id);
+        return reply.send({
+            data: {
+                workspace: ws,
+                meters,
+                daily,
+                warnings
             }
         });
     });

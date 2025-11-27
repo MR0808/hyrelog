@@ -1,8 +1,10 @@
 // src/routes/events/export.ts
 import { FastifyInstance } from 'fastify';
 import { EventExportSchema } from '../../schemas/events';
-import { meterExport } from '../../metering';
 import { getCompanyLimits } from '../../metering/helpers';
+import { incrementCompanyMeter } from '../../metering/company/increment';
+import { incrementWorkspaceMeter } from '../../metering/workspace/increment';
+import { MeterType } from '../../generated/prisma/client';
 
 const MAX_EXPORT_EVENTS = 10_000;
 
@@ -30,8 +32,8 @@ export default async function exportRoutes(fastify: FastifyInstance) {
             }
 
             const q = parsed.data;
-
             const companyId = api.companyId;
+
             const workspaceId =
                 api.scope === 'WORKSPACE'
                     ? api.workspaceId!
@@ -43,6 +45,7 @@ export default async function exportRoutes(fastify: FastifyInstance) {
                 });
             }
 
+            // Retention limits
             const limits = await getCompanyLimits(companyId);
             const retentionDays = limits.retentionDays ?? 0;
 
@@ -66,7 +69,16 @@ export default async function exportRoutes(fastify: FastifyInstance) {
             });
 
             // Meter this export
-            await meterExport(companyId, workspaceId);
+            await incrementCompanyMeter(companyId, MeterType.EXPORTS, 1);
+
+            if (workspaceId) {
+                await incrementWorkspaceMeter(
+                    companyId,
+                    workspaceId,
+                    MeterType.EXPORTS,
+                    1
+                );
+            }
 
             // Return in requested format
             switch (q.format) {
@@ -79,7 +91,7 @@ export default async function exportRoutes(fastify: FastifyInstance) {
                         events.map((e) => JSON.stringify(e)).join('\n')
                     );
 
-                case 'csv':
+                case 'csv': {
                     reply.header('Content-Type', 'text/csv');
                     const header = Object.keys(events[0] || {}).join(',');
                     const rows = events
@@ -90,6 +102,7 @@ export default async function exportRoutes(fastify: FastifyInstance) {
                         )
                         .join('\n');
                     return reply.send([header, rows].join('\n'));
+                }
 
                 default:
                     return reply

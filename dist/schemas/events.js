@@ -13,8 +13,6 @@ exports.EventIngestSchema = zod_1.z.object({
     actorType: zod_1.z.string().optional(),
     actorName: zod_1.z.string().optional(),
     actorEmail: zod_1.z.string().optional(),
-    // JSON payloads (metadata / before / after)
-    // Validated as arbitrary JSON values via JsonSchema
     metadata: json_1.JsonSchema.optional(),
     before: json_1.JsonSchema.optional(),
     after: json_1.JsonSchema.optional()
@@ -23,7 +21,6 @@ exports.EventIngestSchema = zod_1.z.object({
 // EVENT QUERY
 // -------------------------------
 exports.EventQuerySchema = zod_1.z.object({
-    // For company-scoped keys, workspaceId can be specified
     workspaceId: zod_1.z.string().optional(),
     type: zod_1.z.string().optional(),
     actorId: zod_1.z.string().optional(),

@@ -1,24 +1,14 @@
 "use strict";
-// src/routes/events/explorer.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.eventExplorerRoutes = eventExplorerRoutes;
-const prisma_1 = require("../../lib/prisma");
+exports.default = explorerRoutes;
 const events_1 = require("../../schemas/events");
-const pagination_1 = require("../../utils/pagination");
+const helpers_1 = require("../../metering/helpers");
 const WORKSPACE_DEFAULT_LIMIT = 200;
 const WORKSPACE_MAX_LIMIT = 500;
 const COMPANY_DEFAULT_LIMIT = 100;
 const COMPANY_MAX_LIMIT = 250;
-function applyRetention(company, from) {
-    if (company.unlimitedRetention)
-        return from;
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - company.retentionDays * 86400000);
-    return from && from > cutoff ? from : cutoff;
-}
-async function eventExplorerRoutes(fastify) {
+async function explorerRoutes(fastify) {
     fastify.get('/v1/events', {
-        preHandler: fastify.authenticate,
         config: {
             rateLimit: {
                 max: 60,
@@ -26,74 +16,119 @@ async function eventExplorerRoutes(fastify) {
             }
         }
     }, async (request, reply) => {
+        const auth = request.auth;
+        if (!auth) {
+            return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+        }
+        const prisma = fastify.prisma;
         const parsed = events_1.EventQuerySchema.safeParse(request.query);
         if (!parsed.success) {
-            return reply.code(400).send({ error: parsed.error.flatten() });
+            return reply.status(400).send(parsed.error);
         }
-        const { scope, companyId, workspaceId: apiWorkspaceId } = request.auth;
-        const { workspaceId, type, actorId, from, to, q, cursor, limit } = parsed.data;
-        // patched: safe rateLimit access
-        const cfg = request.routeOptions.config;
-        if (cfg.rateLimit) {
-            cfg.rateLimit.max = scope === 'WORKSPACE' ? 120 : 60;
+        const q = parsed.data;
+        const companyId = auth.companyId;
+        // Scope workspaceId based on key type
+        const workspaceId = auth.scope === 'WORKSPACE'
+            ? auth.workspaceId
+            : q.workspaceId ?? undefined;
+        // -------------------------------------------------
+        // Retention limits (company-level)
+        // -------------------------------------------------
+        const limits = await (0, helpers_1.getCompanyLimits)(companyId);
+        const retentionDays = limits.retentionDays ?? 0;
+        const retentionCutoff = limits.unlimitedRetention
+            ? null
+            : new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+        // -------------------------------------------------
+        // Pagination limits
+        // -------------------------------------------------
+        let limit = typeof q.limit === 'number'
+            ? q.limit
+            : auth.scope === 'COMPANY'
+                ? COMPANY_DEFAULT_LIMIT
+                : WORKSPACE_DEFAULT_LIMIT;
+        if (!Number.isFinite(limit) || limit <= 0) {
+            limit =
+                auth.scope === 'COMPANY'
+                    ? COMPANY_DEFAULT_LIMIT
+                    : WORKSPACE_DEFAULT_LIMIT;
         }
-        const company = await prisma_1.prisma.company.findUnique({
-            where: { id: companyId }
-        });
-        if (!company)
-            return reply.code(404).send({ error: 'Company not found' });
-        const requestedFrom = from ? new Date(from) : undefined;
-        const requestedTo = to ? new Date(to) : undefined;
-        const effectiveFrom = applyRetention(company, requestedFrom);
-        const where = { workspace: { companyId } };
-        if (scope === 'WORKSPACE') {
-            if (!apiWorkspaceId) {
-                return reply
-                    .code(403)
-                    .send({ error: 'Invalid workspace API key' });
+        limit =
+            auth.scope === 'COMPANY'
+                ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
+                : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
+        const cursor = q.cursor;
+        // -------------------------------------------------
+        // WHERE clause
+        // -------------------------------------------------
+        const where = {
+            workspace: {
+                companyId
             }
-            where.workspaceId = apiWorkspaceId;
-        }
-        else if (workspaceId) {
+        };
+        if (workspaceId) {
             where.workspaceId = workspaceId;
         }
-        if (type)
-            where.type = type;
-        if (actorId)
-            where.actorId = actorId;
-        if (effectiveFrom || requestedTo) {
-            where.timestamp = {
-                ...(effectiveFrom ? { gte: effectiveFrom } : {}),
-                ...(requestedTo ? { lte: requestedTo } : {})
-            };
+        // Timestamp range (respect retention)
+        if (retentionCutoff || q.from || q.to) {
+            const ts = {};
+            if (retentionCutoff) {
+                ts.gte = retentionCutoff;
+            }
+            if (q.from) {
+                const fromDate = new Date(q.from);
+                ts.gte = ts.gte
+                    ? new Date(Math.max(ts.gte.getTime(), fromDate.getTime()))
+                    : fromDate;
+            }
+            if (q.to) {
+                ts.lte = new Date(q.to);
+            }
+            where.timestamp = ts;
         }
-        if (q) {
+        if (q.type) {
+            where.type = q.type;
+        }
+        if (q.actorId) {
+            where.actorId = q.actorId;
+        }
+        if (q.q) {
+            const term = q.q;
             where.OR = [
-                { type: { contains: q, mode: 'insensitive' } },
-                { actorName: { contains: q, mode: 'insensitive' } },
-                { actorEmail: { contains: q, mode: 'insensitive' } }
+                {
+                    actorName: {
+                        contains: term,
+                        mode: 'insensitive'
+                    }
+                },
+                {
+                    actorEmail: {
+                        contains: term,
+                        mode: 'insensitive'
+                    }
+                },
+                {
+                    type: {
+                        contains: term,
+                        mode: 'insensitive'
+                    }
+                }
             ];
         }
-        const rawLimit = limit ??
-            (scope === 'WORKSPACE'
-                ? WORKSPACE_DEFAULT_LIMIT
-                : COMPANY_DEFAULT_LIMIT);
-        const maxLimit = scope === 'WORKSPACE' ? WORKSPACE_MAX_LIMIT : COMPANY_MAX_LIMIT;
-        const take = Math.min(Math.max(rawLimit, 1), maxLimit);
-        const page = await (0, pagination_1.paginate)({
-            model: prisma_1.prisma.event,
+        // -------------------------------------------------
+        // Fetch page of events
+        // -------------------------------------------------
+        const events = await prisma.event.findMany({
             where,
-            orderBy: { timestamp: 'desc' },
-            cursor: cursor ?? null,
-            limit: take
+            take: limit,
+            skip: cursor ? 1 : 0,
+            ...(cursor ? { cursor: { id: cursor } } : {}),
+            orderBy: { timestamp: 'desc' }
         });
+        const nextCursor = events.length === limit ? events[events.length - 1].id : null;
         return reply.send({
-            data: page.data,
-            nextCursor: page.nextCursor,
-            pagination: {
-                limit: take,
-                nextCursor: page.nextCursor
-            }
+            data: events,
+            nextCursor
         });
     });
 }

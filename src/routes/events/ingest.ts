@@ -1,16 +1,18 @@
 // src/routes/events/ingest.ts
 import { FastifyInstance } from 'fastify';
+import crypto from 'crypto';
+
 import { EventIngestSchema } from '../../schemas/events';
 import { toJson } from '../../utils/toJson';
 import { buildEventHash } from '../../utils/hashchain';
+
 import { incrementCompanyDailyUsage } from '../../metering/daily-company';
 import { incrementWorkspaceDailyUsage } from '../../metering/daily-workspace';
-import { incrementCompanyMonthlyMeter } from '../../metering/monthly-company';
-import { incrementWorkspaceMonthlyMeter } from '../../metering/monthly-workspace';
-import { enforceEventLimit } from '../../metering/enforce';
+import { incrementCompanyMeter } from '../../metering/company/increment';
+import { incrementWorkspaceMeter } from '../../metering/workspace/increment';
 import { MeterType } from '../../generated/prisma/client';
+
 import { enqueueWebhookDelivery } from '../../webhooks/dispatcher';
-import crypto from 'crypto';
 
 export default async function ingestRoutes(fastify: FastifyInstance) {
     fastify.post(
@@ -35,26 +37,49 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
             const companyId = auth.companyId;
             const workspaceId = auth.workspaceId!;
 
-            //
-            // -----------------------------------------------------
-            // 1. EVENT LIMIT ENFORCEMENT (NEW)
-            // -----------------------------------------------------
-            //
-            const limit = await enforceEventLimit(companyId, workspaceId);
+            // -------------------------------------------------
+            // 1. Enforce company-wide EVENTS hard cap
+            // -------------------------------------------------
+            const company = await fastify.prisma.company.findUnique({
+                where: { id: companyId }
+            });
 
-            if (!limit.allowed) {
-                return reply.status(429).send({
-                    error: 'EVENT_LIMIT_REACHED',
-                    used: limit.used,
-                    cap: limit.cap
-                });
+            if (!company) {
+                return reply.status(404).send({ error: 'COMPANY_NOT_FOUND' });
             }
 
-            //
-            // -----------------------------------------------------
-            // 2. Validate event payload
-            // -----------------------------------------------------
-            //
+            if (!company.unlimitedRetention && company.eventsPerMonth > 0) {
+                const now = new Date();
+                const periodStart = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    1
+                );
+
+                const meter =
+                    await fastify.prisma.billingMeterCompany.findFirst({
+                        where: {
+                            companyId,
+                            meterType: 'EVENTS',
+                            periodStart
+                        }
+                    });
+
+                const used = meter?.currentValue ?? 0;
+                const cap = company.eventsPerMonth;
+
+                if (used >= cap) {
+                    return reply.status(429).send({
+                        error: 'EVENT_LIMIT_REACHED',
+                        used,
+                        cap
+                    });
+                }
+            }
+
+            // -------------------------------------------------
+            // 2. Validate payload
+            // -------------------------------------------------
             const parsed = EventIngestSchema.safeParse(request.body);
             if (!parsed.success) {
                 return reply.status(400).send(parsed.error);
@@ -62,11 +87,9 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
 
             const data = parsed.data;
 
-            //
-            // -----------------------------------------------------
-            // 3. Fetch previous event hash
-            // -----------------------------------------------------
-            //
+            // -------------------------------------------------
+            // 3. Get previous event hash for this workspace
+            // -------------------------------------------------
             const prevEvent = await fastify.prisma.event.findFirst({
                 where: { workspaceId },
                 orderBy: { timestamp: 'desc' }
@@ -75,11 +98,9 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
             const prevHash: string | null = prevEvent?.hash ?? null;
             const chainId: string = prevEvent?.chainId ?? crypto.randomUUID();
 
-            //
-            // -----------------------------------------------------
-            // 4. Build new hash
-            // -----------------------------------------------------
-            //
+            // -------------------------------------------------
+            // 4. Build hash-chain value
+            // -------------------------------------------------
             const hash = buildEventHash({
                 type: data.type,
                 actorId: data.actorId,
@@ -92,11 +113,9 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
                 prevHash
             });
 
-            //
-            // -----------------------------------------------------
-            // 5. Create event
-            // -----------------------------------------------------
-            //
+            // -------------------------------------------------
+            // 5. Persist event
+            // -------------------------------------------------
             const event = await fastify.prisma.event.create({
                 data: {
                     workspaceId,
@@ -117,18 +136,16 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
                 }
             });
 
-            //
-            // -----------------------------------------------------
-            // 6. Webhook delivery queued
-            // -----------------------------------------------------
-            //
-            enqueueWebhookDelivery(companyId, event).catch(() => {});
+            // -------------------------------------------------
+            // 6. Webhook: EVENT_INGESTED (queued)
+            // -------------------------------------------------
+            enqueueWebhookDelivery(companyId, event).catch(() => {
+                // swallow errors; ingestion should not fail due to webhook
+            });
 
-            //
-            // -----------------------------------------------------
+            // -------------------------------------------------
             // 7. Metering increments
-            // -----------------------------------------------------
-            //
+            // -------------------------------------------------
             await incrementCompanyDailyUsage(companyId, 'eventsIngested');
             await incrementWorkspaceDailyUsage(
                 companyId,
@@ -136,11 +153,12 @@ export default async function ingestRoutes(fastify: FastifyInstance) {
                 'eventsIngested'
             );
 
-            await incrementCompanyMonthlyMeter(companyId, MeterType.EVENTS);
-            await incrementWorkspaceMonthlyMeter(
+            await incrementCompanyMeter(companyId, MeterType.EVENTS, 1);
+            await incrementWorkspaceMeter(
                 companyId,
                 workspaceId,
-                MeterType.EVENTS
+                MeterType.EVENTS,
+                1
             );
 
             return reply.status(201).send({ data: event });

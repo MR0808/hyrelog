@@ -21,9 +21,10 @@ export default async function explorerRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth) {
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+            }
 
             const prisma = fastify.prisma;
 
@@ -33,68 +34,125 @@ export default async function explorerRoutes(fastify: FastifyInstance) {
             }
 
             const q = parsed.data;
+            const companyId = auth.companyId;
 
-            // Determine limit
-            let limit =
-                q.limit ??
-                (api.scope === 'COMPANY'
-                    ? COMPANY_DEFAULT_LIMIT
-                    : WORKSPACE_DEFAULT_LIMIT);
+            // Scope workspaceId based on key type
+            const workspaceId =
+                auth.scope === 'WORKSPACE'
+                    ? auth.workspaceId!
+                    : q.workspaceId ?? undefined;
 
-            limit =
-                api.scope === 'COMPANY'
-                    ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
-                    : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
-
-            const cursor = q.cursor ?? undefined;
-
-            // Fetch retention limits
-            const limits = await getCompanyLimits(api.companyId);
-
+            // -------------------------------------------------
+            // Retention limits (company-level)
+            // -------------------------------------------------
+            const limits = await getCompanyLimits(companyId);
             const retentionDays = limits.retentionDays ?? 0;
 
             const retentionCutoff = limits.unlimitedRetention
                 ? null
                 : new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
-            // Build base filter
-            const where: any = {};
+            // -------------------------------------------------
+            // Pagination limits
+            // -------------------------------------------------
+            let limit =
+                typeof q.limit === 'number'
+                    ? q.limit
+                    : auth.scope === 'COMPANY'
+                    ? COMPANY_DEFAULT_LIMIT
+                    : WORKSPACE_DEFAULT_LIMIT;
 
-            // Workspace determination
-            if (api.scope === 'WORKSPACE') {
-                where.workspaceId = api.workspaceId!;
-            } else if (q.workspaceId) {
-                where.workspaceId = q.workspaceId;
-            } else {
-                // Company key: all workspaces under the company
-                const wsList = await prisma.workspace.findMany({
-                    where: { companyId: api.companyId },
-                    select: { id: true }
-                });
-                where.workspaceId = { in: wsList.map((w) => w.id) };
+            if (!Number.isFinite(limit) || limit <= 0) {
+                limit =
+                    auth.scope === 'COMPANY'
+                        ? COMPANY_DEFAULT_LIMIT
+                        : WORKSPACE_DEFAULT_LIMIT;
             }
 
-            // Apply retention
-            if (retentionCutoff) {
-                where.timestamp = { gte: retentionCutoff };
+            limit =
+                auth.scope === 'COMPANY'
+                    ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
+                    : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
+
+            const cursor = q.cursor;
+
+            // -------------------------------------------------
+            // WHERE clause
+            // -------------------------------------------------
+            const where: any = {
+                workspace: {
+                    companyId
+                }
+            };
+
+            if (workspaceId) {
+                where.workspaceId = workspaceId;
             }
 
-            // Additional filters
-            if (q.type) where.type = q.type;
-            if (q.actorId) where.actorId = q.actorId;
+            // Timestamp range (respect retention)
+            if (retentionCutoff || q.from || q.to) {
+                const ts: any = {};
 
-            // Keyword search (`metadata` search will be improved later)
+                if (retentionCutoff) {
+                    ts.gte = retentionCutoff;
+                }
+
+                if (q.from) {
+                    const fromDate = new Date(q.from);
+                    ts.gte = ts.gte
+                        ? new Date(
+                              Math.max(ts.gte.getTime(), fromDate.getTime())
+                          )
+                        : fromDate;
+                }
+
+                if (q.to) {
+                    ts.lte = new Date(q.to);
+                }
+
+                where.timestamp = ts;
+            }
+
+            if (q.type) {
+                where.type = q.type;
+            }
+
+            if (q.actorId) {
+                where.actorId = q.actorId;
+            }
+
             if (q.q) {
+                const term = q.q;
                 where.OR = [
-                    { type: { contains: q.q, mode: 'insensitive' } },
-                    { actorName: { contains: q.q, mode: 'insensitive' } }
+                    {
+                        actorName: {
+                            contains: term,
+                            mode: 'insensitive'
+                        }
+                    },
+                    {
+                        actorEmail: {
+                            contains: term,
+                            mode: 'insensitive'
+                        }
+                    },
+                    {
+                        type: {
+                            contains: term,
+                            mode: 'insensitive'
+                        }
+                    }
                 ];
             }
 
+            // -------------------------------------------------
+            // Fetch page of events
+            // -------------------------------------------------
             const events = await prisma.event.findMany({
                 where,
                 take: limit,
-                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+                skip: cursor ? 1 : 0,
+                ...(cursor ? { cursor: { id: cursor } } : {}),
                 orderBy: { timestamp: 'desc' }
             });
 

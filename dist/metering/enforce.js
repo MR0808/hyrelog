@@ -1,0 +1,42 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.enforceEventLimit = enforceEventLimit;
+const client_1 = require("../generated/prisma/client");
+const prisma_1 = require("../lib/prisma");
+/**
+ * Enforce event ingestion limit.
+ * Uses BillingMeterCompany + Company plan limits.
+ */
+async function enforceEventLimit(companyId, workspaceId) {
+    const [company, companyMeter, workspaceMeter] = await Promise.all([
+        prisma_1.prisma.company.findUnique({ where: { id: companyId } }),
+        prisma_1.prisma.billingMeterCompany.findFirst({
+            where: { companyId, meterType: client_1.MeterType.EVENTS },
+            orderBy: { periodStart: 'desc' }
+        }),
+        prisma_1.prisma.billingMeterWorkspace.findFirst({
+            where: { companyId, workspaceId, meterType: client_1.MeterType.EVENTS },
+            orderBy: { periodStart: 'desc' }
+        })
+    ]);
+    if (!company)
+        return { allowed: false, reason: 'COMPANY_NOT_FOUND' };
+    const companyUsed = companyMeter?.currentValue ?? 0;
+    const workspaceUsed = workspaceMeter?.currentValue ?? 0;
+    const cap = company.eventsPerMonth;
+    // Company-wide cap
+    if (companyUsed >= cap) {
+        return { allowed: false, used: companyUsed, cap };
+    }
+    // Workspace cap is *soft* (per-meter softThreshold)
+    if (workspaceMeter?.softThreshold &&
+        workspaceUsed > workspaceMeter.softThreshold) {
+        return {
+            allowed: true,
+            softWarning: true,
+            used: workspaceUsed,
+            softThreshold: workspaceMeter.softThreshold
+        };
+    }
+    return { allowed: true, used: workspaceUsed, cap };
+}

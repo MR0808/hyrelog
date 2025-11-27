@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.NullableJsonNullValueInput = exports.SortOrder = exports.StripeSubscriptionItemScalarFieldEnum = exports.StripeSubscriptionScalarFieldEnum = exports.UsageStatsScalarFieldEnum = exports.BillingMeterScalarFieldEnum = exports.WorkspaceUserScalarFieldEnum = exports.CompanyUserScalarFieldEnum = exports.ApiKeyLogScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.EventScalarFieldEnum = exports.WorkspaceScalarFieldEnum = exports.CompanyScalarFieldEnum = exports.CompanyAddOnScalarFieldEnum = exports.AddOnScalarFieldEnum = exports.PlanScalarFieldEnum = exports.VerificationScalarFieldEnum = exports.SessionScalarFieldEnum = exports.AccountScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.NullableJsonNullValueInput = exports.SortOrder = exports.WebhookDeliveryScalarFieldEnum = exports.StripeSubscriptionItemScalarFieldEnum = exports.StripeSubscriptionScalarFieldEnum = exports.BillingMeterWorkspaceScalarFieldEnum = exports.BillingMeterCompanyScalarFieldEnum = exports.UsageStatsWorkspaceScalarFieldEnum = exports.UsageStatsCompanyScalarFieldEnum = exports.WorkspaceUserScalarFieldEnum = exports.CompanyUserScalarFieldEnum = exports.ApiKeyLogScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.EventScalarFieldEnum = exports.WorkspaceScalarFieldEnum = exports.CompanyScalarFieldEnum = exports.CompanyAddOnScalarFieldEnum = exports.AddOnScalarFieldEnum = exports.PlanScalarFieldEnum = exports.VerificationScalarFieldEnum = exports.SessionScalarFieldEnum = exports.AccountScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -117,10 +117,13 @@ exports.ModelName = {
     ApiKeyLog: 'ApiKeyLog',
     CompanyUser: 'CompanyUser',
     WorkspaceUser: 'WorkspaceUser',
-    BillingMeter: 'BillingMeter',
-    UsageStats: 'UsageStats',
+    UsageStatsCompany: 'UsageStatsCompany',
+    UsageStatsWorkspace: 'UsageStatsWorkspace',
+    BillingMeterCompany: 'BillingMeterCompany',
+    BillingMeterWorkspace: 'BillingMeterWorkspace',
     StripeSubscription: 'StripeSubscription',
-    StripeSubscriptionItem: 'StripeSubscriptionItem'
+    StripeSubscriptionItem: 'StripeSubscriptionItem',
+    WebhookDelivery: 'WebhookDelivery'
 };
 /**
  * Enums
@@ -223,6 +226,8 @@ exports.CompanyScalarFieldEnum = {
     eventsWarningAbsolute: 'eventsWarningAbsolute',
     exportsWarningPercent: 'exportsWarningPercent',
     exportsWarningAbsolute: 'exportsWarningAbsolute',
+    webhookUrl: 'webhookUrl',
+    webhookSecret: 'webhookSecret',
     stripeCustomerId: 'stripeCustomerId'
 };
 exports.WorkspaceScalarFieldEnum = {
@@ -294,7 +299,45 @@ exports.WorkspaceUserScalarFieldEnum = {
     userId: 'userId',
     role: 'role'
 };
-exports.BillingMeterScalarFieldEnum = {
+exports.UsageStatsCompanyScalarFieldEnum = {
+    id: 'id',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    companyId: 'companyId',
+    date: 'date',
+    eventsIngested: 'eventsIngested',
+    eventsStored: 'eventsStored',
+    exportsRun: 'exportsRun',
+    activeApiKeys: 'activeApiKeys',
+    seats: 'seats'
+};
+exports.UsageStatsWorkspaceScalarFieldEnum = {
+    id: 'id',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    companyId: 'companyId',
+    workspaceId: 'workspaceId',
+    date: 'date',
+    eventsIngested: 'eventsIngested',
+    eventsStored: 'eventsStored',
+    exportsRun: 'exportsRun'
+};
+exports.BillingMeterCompanyScalarFieldEnum = {
+    id: 'id',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    companyId: 'companyId',
+    meterType: 'meterType',
+    periodStart: 'periodStart',
+    periodEnd: 'periodEnd',
+    currentValue: 'currentValue',
+    softThreshold: 'softThreshold',
+    hardCap: 'hardCap',
+    unitSize: 'unitSize',
+    unitPrice: 'unitPrice',
+    lastIncrementAt: 'lastIncrementAt'
+};
+exports.BillingMeterWorkspaceScalarFieldEnum = {
     id: 'id',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
@@ -309,19 +352,6 @@ exports.BillingMeterScalarFieldEnum = {
     unitSize: 'unitSize',
     unitPrice: 'unitPrice',
     lastIncrementAt: 'lastIncrementAt'
-};
-exports.UsageStatsScalarFieldEnum = {
-    id: 'id',
-    createdAt: 'createdAt',
-    updatedAt: 'updatedAt',
-    companyId: 'companyId',
-    workspaceId: 'workspaceId',
-    date: 'date',
-    eventsIngested: 'eventsIngested',
-    eventsStored: 'eventsStored',
-    seats: 'seats',
-    activeApiKeys: 'activeApiKeys',
-    exportsRun: 'exportsRun'
 };
 exports.StripeSubscriptionScalarFieldEnum = {
     id: 'id',
@@ -347,6 +377,19 @@ exports.StripeSubscriptionItemScalarFieldEnum = {
     stripePriceId: 'stripePriceId',
     stripeSubscriptionItemId: 'stripeSubscriptionItemId',
     quantity: 'quantity'
+};
+exports.WebhookDeliveryScalarFieldEnum = {
+    id: 'id',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    companyId: 'companyId',
+    eventId: 'eventId',
+    url: 'url',
+    status: 'status',
+    attempts: 'attempts',
+    lastError: 'lastError',
+    nextAttemptAt: 'nextAttemptAt',
+    payload: 'payload'
 };
 exports.SortOrder = {
     asc: 'asc',

@@ -1,65 +1,116 @@
 // src/server.ts
-import Fastify from 'fastify';
+import fastify, { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 
 import { prismaPlugin } from './plugins/prisma';
 import apiKeyAuthPlugin from './plugins/api-key-auth';
-import apiKeyLoggingPlugin from './plugins/api-key-logger';
 
-// Core routes
 import companyRoutes from './routes/company';
 import workspaceRoutes from './routes/workspaces';
-
-// Event routes
 import ingestRoutes from './routes/events/ingest';
 import explorerRoutes from './routes/events/explorer';
 import exportRoutes from './routes/events/export';
+// If you added webhook routes, keep this import; otherwise remove/comment.
+// import webhookRoutes from './routes/webhooks';
 
-// Webhook system routes
-import companyWebhookRoutes from './routes/company-webhooks';
-import companyWebhookDeliveryRoutes from './routes/company-webhook-deliveries';
+export function buildServer(): FastifyInstance {
+    const app = fastify({
+        logger: true
+    });
 
-export async function buildServer() {
-    const fastify = Fastify({
-        logger: {
-            transport: {
-                target: 'pino-pretty',
-                options: { colorize: true }
-            }
+    // -----------------------------
+    // Core plugins
+    // -----------------------------
+    app.register(rateLimit, {
+        global: false
+    });
+
+    app.register(cors, {
+        origin: true
+    });
+
+    app.register(helmet);
+
+    app.register(prismaPlugin);
+    app.register(apiKeyAuthPlugin);
+
+    // -----------------------------
+    // Global API key auth for /v1/*
+    // -----------------------------
+    app.addHook('onRequest', async (request, reply) => {
+        // onRequest runs before route is resolved; routeOptions.url may be undefined.
+        // Use raw URL to decide which paths require auth.
+        const url = request.raw.url || '';
+
+        // Health endpoint is always public
+        if (url.startsWith('/health')) return;
+
+        // Require API key for all versioned API routes
+        if (url.startsWith('/v1')) {
+            await app.authenticate(request, reply);
         }
     });
 
-    // --- Core Plugins ---
-    await fastify.register(cors, { origin: '*' });
-    await fastify.register(rateLimit, { global: false });
-    await fastify.register(prismaPlugin);
-    await fastify.register(apiKeyAuthPlugin);
-    await fastify.register(apiKeyLoggingPlugin);
+    // -----------------------------
+    // Routes
+    // -----------------------------
+    app.register(companyRoutes);
+    app.register(workspaceRoutes);
+    app.register(ingestRoutes);
+    app.register(explorerRoutes);
+    app.register(exportRoutes);
+    // app.register(webhookRoutes);
 
-    // --- Route Registration ---
-    await fastify.register(companyRoutes);
-    await fastify.register(workspaceRoutes);
+    // Health check
+    app.get('/health', async () => ({ status: 'ok' }));
 
-    await fastify.register(ingestRoutes);
-    await fastify.register(explorerRoutes);
-    await fastify.register(exportRoutes);
+    // -----------------------------
+    // Centralized error handler
+    // -----------------------------
+    app.setErrorHandler((error, request, reply) => {
+        const err = error as any;
 
-    // --- NEW — Webhook System ---
-    await fastify.register(companyWebhookRoutes);
-    await fastify.register(companyWebhookDeliveryRoutes);
+        app.log.error(
+            {
+                err,
+                reqId: request.id,
+                method: request.method,
+                url: request.raw.url
+            },
+            'request error'
+        );
 
-    // --- Error Handler ---
-    fastify.setErrorHandler((err, request, reply) => {
-        fastify.log.error(err);
+        const statusCode =
+            typeof err.statusCode === 'number' ? err.statusCode : 500;
+        const code = typeof err.code === 'string' ? err.code : 'INTERNAL_ERROR';
 
-        const status = (err as any).statusCode ?? 500;
-
-        reply.status(status).send({
-            error: (err as any).message ?? 'INTERNAL_ERROR',
-            code: (err as any).code ?? 'INTERNAL_ERROR'
+        reply.status(statusCode).send({
+            error:
+                err instanceof Error
+                    ? err.message
+                    : 'An unknown error occurred',
+            code
         });
     });
 
-    return fastify;
+    return app;
 }
+
+// Standalone start
+if (require.main === module) {
+    const app = buildServer();
+    const port = Number(process.env.PORT) || 3000;
+
+    app.listen({ port, host: '0.0.0.0' })
+        .then(() => {
+            app.log.info({ port }, 'HyreLog API server started');
+        })
+        .catch((err) => {
+            app.log.error(err, 'Failed to start HyreLog server');
+            process.exit(1);
+        });
+}
+
+export default buildServer;
