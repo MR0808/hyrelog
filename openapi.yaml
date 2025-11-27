@@ -1,0 +1,1093 @@
+openapi: 3.1.0
+info:
+  title: HyreLog API
+  version: 1.0.0
+  description: >
+    HyreLog is an audit trail API for SaaS & internal tools. Events are written
+    via workspace-scoped API keys and queried via company or workspace keys.
+servers:
+  - url: https://api.hyrelog.com
+    description: Production API
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Pagination cursor returned by previous response.
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+      description: Page size. Defaults vary by endpoint and scope.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+        code:
+          type: string
+          nullable: true
+          description: Machine-readable error code (e.g. EVENT_LIMIT_REACHED).
+        details:
+          description: Optional error details.
+      required: [error]
+
+    JsonValue:
+      description: Arbitrary JSON value.
+      oneOf:
+        - type: string
+        - type: number
+        - type: boolean
+        - type: 'null'
+        - type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JsonValue'
+        - type: array
+          items:
+            $ref: '#/components/schemas/JsonValue'
+
+    EventIngestRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Event type (e.g. user.login, invoice.paid).
+        actorId:
+          type: string
+          nullable: true
+        actorType:
+          type: string
+          nullable: true
+        actorName:
+          type: string
+          nullable: true
+        actorEmail:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/JsonValue'
+        before:
+          $ref: '#/components/schemas/JsonValue'
+        after:
+          $ref: '#/components/schemas/JsonValue'
+      required: [type]
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        timestamp:
+          type: string
+          format: date-time
+        workspaceId:
+          type: string
+        type:
+          type: string
+        actorId:
+          type: string
+          nullable: true
+        actorType:
+          type: string
+          nullable: true
+        actorName:
+          type: string
+          nullable: true
+        actorEmail:
+          type: string
+          nullable: true
+        sourceIp:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/JsonValue'
+        before:
+          $ref: '#/components/schemas/JsonValue'
+        after:
+          $ref: '#/components/schemas/JsonValue'
+        chainId:
+          type: string
+        hash:
+          type: string
+        prevHash:
+          type: string
+          nullable: true
+      required:
+        - id
+        - createdAt
+        - timestamp
+        - workspaceId
+        - type
+        - chainId
+        - hash
+
+    PaginatedEventsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        nextCursor:
+          type: string
+          nullable: true
+      required: [data]
+
+    EventQueryParams:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          description: >
+            For company keys only. Workspace to filter by. Workspace keys ignore this.
+        type:
+          type: string
+        actorId:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        q:
+          type: string
+          description: Free-text search in metadata (implementation-specific).
+        cursor:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+
+    EventExportParams:
+      allOf:
+        - $ref: '#/components/schemas/EventQueryParams'
+        - type: object
+          properties:
+            format:
+              type: string
+              enum: [json, ndjson, csv]
+              default: json
+
+    CompanyLimits:
+      type: object
+      properties:
+        eventsPerMonth:
+          type: integer
+        exportsPerMonth:
+          type: integer
+        retentionDays:
+          type: integer
+        unlimitedRetention:
+          type: boolean
+      required:
+        - eventsPerMonth
+        - exportsPerMonth
+        - retentionDays
+        - unlimitedRetention
+
+    CompanyDailyUsage:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date-time
+        eventsIngested:
+          type: integer
+        eventsStored:
+          type: integer
+        exportsRun:
+          type: integer
+        activeApiKeys:
+          type: integer
+        seats:
+          type: integer
+
+    CompanyEventsMeter:
+      type: object
+      properties:
+        id:
+          type: string
+        meterType:
+          type: string
+          enum: [EVENTS, WORKSPACES, USERS, EXPORTS]
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        currentValue:
+          type: integer
+
+    Company:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        planTier:
+          type: string
+          enum: [FREE, STARTER, GROWTH, SCALE, ENTERPRISE]
+        billingInterval:
+          type: string
+          enum: [MONTHLY, YEARLY]
+        eventsPerMonth:
+          type: integer
+        exportsPerMonth:
+          type: integer
+        retentionDays:
+          type: integer
+        unlimitedRetention:
+          type: boolean
+      required:
+        - id
+        - name
+        - slug
+        - planTier
+        - billingInterval
+        - eventsPerMonth
+        - exportsPerMonth
+        - retentionDays
+        - unlimitedRetention
+
+    CompanyResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            company:
+              $ref: '#/components/schemas/Company'
+            limits:
+              $ref: '#/components/schemas/CompanyLimits'
+            usage:
+              type: object
+              properties:
+                latestDaily:
+                  allOf:
+                    - $ref: '#/components/schemas/CompanyDailyUsage'
+                    - nullable: true
+                latestEventsMeter:
+                  allOf:
+                    - $ref: '#/components/schemas/CompanyEventsMeter'
+                    - nullable: true
+      required: [data]
+
+    Workspace:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        companyId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, slug, companyId, createdAt, updatedAt]
+
+    WorkspaceUsageResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            workspace:
+              $ref: '#/components/schemas/Workspace'
+            meters:
+              type: array
+              items:
+                $ref: '#/components/schemas/BillingMeterWorkspace'
+            daily:
+              type: array
+              items:
+                $ref: '#/components/schemas/UsageStatsWorkspace'
+
+    BillingMeterWorkspace:
+      type: object
+      properties:
+        id:
+          type: string
+        companyId:
+          type: string
+        workspaceId:
+          type: string
+        meterType:
+          type: string
+          enum: [EVENTS, WORKSPACES, USERS, EXPORTS]
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        currentValue:
+          type: integer
+
+    UsageStatsWorkspace:
+      type: object
+      properties:
+        id:
+          type: string
+        companyId:
+          type: string
+        workspaceId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        eventsIngested:
+          type: integer
+        eventsStored:
+          type: integer
+        exportsRun:
+          type: integer
+
+    UsageStatsCompany:
+      type: object
+      properties:
+        id:
+          type: string
+        companyId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        eventsIngested:
+          type: integer
+        eventsStored:
+          type: integer
+        exportsRun:
+          type: integer
+        activeApiKeys:
+          type: integer
+        seats:
+          type: integer
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [COMPANY, WORKSPACE]
+        keyPrefix:
+          type: string
+        companyId:
+          type: string
+        workspaceId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revoked:
+          type: boolean
+      required:
+        - id
+        - name
+        - scope
+        - keyPrefix
+        - companyId
+        - createdAt
+        - updatedAt
+        - revoked
+
+    ApiKeyCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Human-readable name for this key.
+        scope:
+          type: string
+          enum: [COMPANY, WORKSPACE]
+        workspaceId:
+          type: string
+          nullable: true
+          description: Required when scope=WORKSPACE.
+      required: [name, scope]
+
+    ApiKeyCreateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            apiKey:
+              $ref: '#/components/schemas/ApiKey'
+            secret:
+              type: string
+              description: Full API key value. Shown once only.
+          required: [apiKey, secret]
+      required: [data]
+
+    ApiKeyListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey']
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        companyId:
+          type: string
+        eventId:
+          type: string
+          nullable: true
+        url:
+          type: string
+        status:
+          type: string
+          description: 'SUCCESS, FAILED, PENDING, RETRY'
+        attempts:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        payload:
+          $ref: '#/components/schemas/JsonValue'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PaginatedWebhookDeliveries:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDelivery'
+        nextCursor:
+          type: string
+          nullable: true
+
+paths:
+  /v1/events:
+    post:
+      summary: Ingest an event
+      description: >
+        Ingest a single immutable event into the hash-chain for a workspace.
+        Requires a WORKSPACE-scoped API key.
+      security:
+        - ApiKeyAuth: []
+      tags: [Events]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventIngestRequest'
+      responses:
+        '201':
+          description: Event created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Company-scoped key not allowed to ingest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Events limit reached for this billing period
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Query events (Event Explorer)
+      description: >
+        Query events with filters, pagination and retention enforcement.
+        Company keys can optionally pass workspaceId; workspace keys are
+        implicitly scoped.
+      security:
+        - ApiKeyAuth: []
+      tags: [Events]
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventsResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/events/export:
+    get:
+      summary: Export events
+      description: >
+        Export events for a workspace in JSON, NDJSON or CSV format. 
+        Enforces retention and export metering. Company keys must provide workspaceId.
+      security:
+        - ApiKeyAuth: []
+      tags: [Events]
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, ndjson, csv]
+            default: json
+      responses:
+        '200':
+          description: Export payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+            application/x-ndjson:
+              schema:
+                type: string
+                description: NDJSON lines
+            text/csv:
+              schema:
+                type: string
+                description: CSV text
+        '400':
+          description: Bad request (e.g. company key without workspaceId)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/company:
+    get:
+      summary: Get company profile and limits
+      security:
+        - ApiKeyAuth: []
+      tags: [Company]
+      responses:
+        '200':
+          description: Company profile, limits and latest usage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Workspace key forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/company/workspaces:
+    get:
+      summary: List workspaces for a company
+      security:
+        - ApiKeyAuth: []
+      tags: [Company]
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated list of workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Workspace'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Workspace key forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/company/workspaces/{id}:
+    get:
+      summary: Get a single workspace by ID (company scope)
+      security:
+        - ApiKeyAuth: []
+      tags: [Company]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace + latest usage snapshots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceUsageResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Workspace does not belong to this company or workspace key misused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workspace not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/company/usage:
+    get:
+      summary: Get company-level usage history and meters
+      security:
+        - ApiKeyAuth: []
+      tags: [Company]
+      responses:
+        '200':
+          description: Company meters and recent daily stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      meters:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BillingMeterCompany'
+                      daily:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UsageStatsCompany'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/workspaces:
+    get:
+      summary: List workspaces
+      description: >
+        Company key → all workspaces for the company.  
+        Workspace key → just that workspace.
+      security:
+        - ApiKeyAuth: []
+      tags: [Workspaces]
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Workspaces with pagination for company keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Workspace'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/workspaces/{id}:
+    get:
+      summary: Get workspace details
+      description: >
+        Workspace keys can only access their own workspace. 
+        Company keys can access any workspace under their company.
+      security:
+        - ApiKeyAuth: []
+      tags: [Workspaces]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Workspace'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden for this key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workspace not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/workspaces/{id}/usage:
+    get:
+      summary: Get workspace usage metrics
+      security:
+        - ApiKeyAuth: []
+      tags: [Workspaces]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace meters and daily stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceUsageResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/api-keys:
+    get:
+      summary: List API keys for this company
+      security:
+        - ApiKeyAuth: []
+      tags: [API Keys]
+      responses:
+        '200':
+          description: All API keys for the company (company dashboard usage)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create API key
+      description: >
+        Create a company-scoped key or workspace-scoped key.  
+        Full secret key is returned once and must be stored by the caller.
+      security:
+        - ApiKeyAuth: []
+      tags: [API Keys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreateRequest'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/api-keys/{id}:
+    delete:
+      summary: Revoke an API key
+      description: Marks an API key as revoked. Existing secrets will no longer work.
+      security:
+        - ApiKeyAuth: []
+      tags: [API Keys]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: API key revoked
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/webhooks/deliveries:
+    get:
+      summary: List webhook deliveries
+      description: >
+        List webhook deliveries for the authenticated company. 
+        Supports pagination, ordered by createdAt descending.
+      security:
+        - ApiKeyAuth: []
+      tags: [Webhooks]
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Webhook deliveries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWebhookDeliveries'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/webhooks/deliveries/{id}:
+    get:
+      summary: Get a webhook delivery
+      security:
+        - ApiKeyAuth: []
+      tags: [Webhooks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Webhook delivery details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Delivery not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

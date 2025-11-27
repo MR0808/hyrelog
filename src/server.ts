@@ -12,6 +12,7 @@ import workspaceRoutes from './routes/workspaces';
 import ingestRoutes from './routes/events/ingest';
 import explorerRoutes from './routes/events/explorer';
 import exportRoutes from './routes/events/export';
+import fastifyPrintRoutes from 'fastify-print-routes';
 // If you added webhook routes, keep this import; otherwise remove/comment.
 // import webhookRoutes from './routes/webhooks';
 
@@ -19,6 +20,8 @@ export function buildServer(): FastifyInstance {
     const app = fastify({
         logger: true
     });
+
+    app.register(fastifyPrintRoutes);
 
     // -----------------------------
     // Core plugins
