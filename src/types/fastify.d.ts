@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 declare module 'fastify' {
     interface FastifyRequest {
         auth?: {
-            workspaceId: string;
+            workspaceId: string | null;
             apiKeyId: string;
             scope: 'WORKSPACE' | 'COMPANY';
             companyId: string;

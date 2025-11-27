@@ -1,7 +1,7 @@
 // src/routes/events/explorer.ts
 import { FastifyInstance } from 'fastify';
 import { EventQuerySchema } from '../../schemas/events';
-import { getCompanyLimits } from '../../lib/metering/helpers';
+import { getCompanyLimits } from '../../metering/helpers';
 
 const WORKSPACE_DEFAULT_LIMIT = 200;
 const WORKSPACE_MAX_LIMIT = 500;
@@ -51,11 +51,11 @@ export default async function explorerRoutes(fastify: FastifyInstance) {
             // Fetch retention limits
             const limits = await getCompanyLimits(api.companyId);
 
+            const retentionDays = limits.retentionDays ?? 0;
+
             const retentionCutoff = limits.unlimitedRetention
                 ? null
-                : new Date(
-                      Date.now() - limits.retentionDays * 24 * 60 * 60 * 1000
-                  );
+                : new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
             // Build base filter
             const where: any = {};

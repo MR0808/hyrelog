@@ -1,8 +1,8 @@
 // src/routes/events/export.ts
 import { FastifyInstance } from 'fastify';
 import { EventExportSchema } from '../../schemas/events';
-import { meterExport } from '../../lib/metering';
-import { getCompanyLimits } from '../../lib/metering/helpers';
+import { meterExport } from '../../metering';
+import { getCompanyLimits } from '../../metering/helpers';
 
 const MAX_EXPORT_EVENTS = 10_000;
 
@@ -44,11 +44,11 @@ export default async function exportRoutes(fastify: FastifyInstance) {
             }
 
             const limits = await getCompanyLimits(companyId);
+            const retentionDays = limits.retentionDays ?? 0;
+
             const retentionCutoff = limits.unlimitedRetention
                 ? null
-                : new Date(
-                      Date.now() - limits.retentionDays * 24 * 60 * 60 * 1000
-                  );
+                : new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
             const where: any = { workspaceId };
 

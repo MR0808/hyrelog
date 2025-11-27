@@ -1,5 +1,6 @@
 // src/routes/workspaces.ts
 import { FastifyInstance } from 'fastify';
+import { getWorkspaceWarnings } from '../metering/workspace/warnings';
 
 const WORKSPACE_DEFAULT_LIMIT = 200;
 const WORKSPACE_MAX_LIMIT = 500;
@@ -11,8 +12,8 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
     /**
      * ---------------------------------------------------------
      * GET /v1/workspaces
-     * Company key → list all workspaces
-     * Workspace key → only its own
+     * Company key → all workspaces
+     * Workspace key → one workspace
      * ---------------------------------------------------------
      */
     fastify.get<{
@@ -29,7 +30,8 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
                     properties: {
                         cursor: { type: 'string' },
                         limit: { type: ['string', 'number'] }
-                    }
+                    },
+                    additionalProperties: true
                 }
             },
             config: {
@@ -40,32 +42,30 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
             const prisma = fastify.prisma;
 
-            // Determine limit
-            const limitInput = request.query.limit;
+            const rawLimit = request.query.limit;
             let limit =
-                limitInput !== undefined
-                    ? Number(limitInput)
-                    : api.scope === 'COMPANY'
+                rawLimit !== undefined
+                    ? Number(rawLimit)
+                    : auth.scope === 'COMPANY'
                     ? COMPANY_DEFAULT_LIMIT
                     : WORKSPACE_DEFAULT_LIMIT;
 
             limit =
-                api.scope === 'COMPANY'
+                auth.scope === 'COMPANY'
                     ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
                     : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
 
             const cursor = request.query.cursor;
 
-            // COMPANY KEY
-            if (api.scope === 'COMPANY') {
+            if (auth.scope === 'COMPANY') {
                 const workspaces = await prisma.workspace.findMany({
-                    where: { companyId: api.companyId },
+                    where: { companyId: auth.companyId },
                     take: limit,
                     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
                     orderBy: { createdAt: 'asc' }
@@ -82,9 +82,9 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
                 });
             }
 
-            // WORKSPACE KEY — only its own workspace
+            // Workspace scoped: only its own workspace
             const ws = await prisma.workspace.findUnique({
-                where: { id: api.workspaceId! }
+                where: { id: auth.workspaceId! }
             });
 
             return reply.send({
@@ -97,8 +97,7 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
     /**
      * ---------------------------------------------------------
      * GET /v1/workspaces/:id
-     * Workspace key → only if :id matches
-     * Company key → only if workspace belongs to company
+     * Scoping rules applied
      * ---------------------------------------------------------
      */
     fastify.get(
@@ -112,28 +111,127 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
             const prisma = fastify.prisma;
-            const id = (request.params as any).id as string;
+            const { id } = request.params as { id: string };
 
             const ws = await prisma.workspace.findUnique({
                 where: { id }
             });
 
-            if (!ws) return reply.status(404).send({ error: 'NOT_FOUND' });
+            if (!ws)
+                return reply.status(404).send({ error: 'WORKSPACE_NOT_FOUND' });
 
-            if (api.scope === 'WORKSPACE' && api.workspaceId !== ws.id) {
+            if (auth.scope === 'WORKSPACE' && auth.workspaceId !== ws.id) {
                 return reply.status(403).send({ error: 'FORBIDDEN' });
             }
 
-            if (api.scope === 'COMPANY' && ws.companyId !== api.companyId) {
+            if (auth.scope === 'COMPANY' && ws.companyId !== auth.companyId) {
                 return reply.status(403).send({ error: 'FORBIDDEN' });
             }
 
-            return reply.send({ data: ws });
+            const latestDaily = await prisma.usageStatsWorkspace.findFirst({
+                where: {
+                    companyId: ws.companyId,
+                    workspaceId: ws.id
+                },
+                orderBy: { date: 'desc' }
+            });
+
+            const latestEventsMeter =
+                await prisma.billingMeterWorkspace.findFirst({
+                    where: {
+                        companyId: ws.companyId,
+                        workspaceId: ws.id
+                    },
+                    orderBy: { periodStart: 'desc' }
+                });
+
+            const warnings = await getWorkspaceWarnings(ws.companyId, ws.id);
+
+            return reply.send({
+                data: {
+                    workspace: ws,
+                    usage: {
+                        latestDaily,
+                        latestEventsMeter,
+                        warnings
+                    }
+                }
+            });
+        }
+    );
+
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces/:id/usage
+     * Workspace usage snapshot (90 days)
+     * ---------------------------------------------------------
+     */
+    fastify.get(
+        '/v1/workspaces/:id/usage',
+        {
+            config: {
+                rateLimit: {
+                    max: 30,
+                    timeWindow: '1 minute'
+                }
+            }
+        },
+        async (request, reply) => {
+            const auth = request.auth;
+            if (!auth)
+                return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+
+            const prisma = fastify.prisma;
+            const { id } = request.params as { id: string };
+
+            const ws = await prisma.workspace.findUnique({
+                where: { id }
+            });
+
+            if (!ws) {
+                return reply.status(404).send({ error: 'WORKSPACE_NOT_FOUND' });
+            }
+
+            if (auth.scope === 'WORKSPACE' && auth.workspaceId !== id) {
+                return reply.status(403).send({ error: 'FORBIDDEN' });
+            }
+
+            if (auth.scope === 'COMPANY' && ws.companyId !== auth.companyId) {
+                return reply.status(403).send({ error: 'FORBIDDEN' });
+            }
+
+            const meters = await prisma.billingMeterWorkspace.findMany({
+                where: {
+                    companyId: ws.companyId,
+                    workspaceId: ws.id
+                },
+                orderBy: { periodStart: 'desc' }
+            });
+
+            const daily = await prisma.usageStatsWorkspace.findMany({
+                where: {
+                    companyId: ws.companyId,
+                    workspaceId: ws.id
+                },
+                orderBy: { date: 'desc' },
+                take: 90
+            });
+
+            const warnings = await getWorkspaceWarnings(ws.companyId, ws.id);
+
+            return reply.send({
+                data: {
+                    workspace: ws,
+                    meters,
+                    daily,
+                    warnings
+                }
+            });
         }
     );
 }

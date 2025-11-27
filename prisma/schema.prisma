@@ -7,10 +7,10 @@ datasource db {
   provider = "postgresql"
 }
 
+//
 // -----------------------------
 // Enums
 // -----------------------------
-
 enum CompanyRole {
   OWNER
   ADMIN
@@ -60,10 +60,10 @@ enum ApiKeyScope {
   WORKSPACE
 }
 
+//
 // -----------------------------
 // Auth (Next.js)
 // -----------------------------
-
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -134,10 +134,10 @@ model Verification {
   user   User?   @relation(fields: [userId], references: [id])
 }
 
+//
 // -----------------------------
 // Plans / Add-ons
 // -----------------------------
-
 model Plan {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -167,8 +167,7 @@ model AddOn {
 
   extraEventsPerMonth  Int @default(0)
   extraExportsPerMonth Int @default(0)
-
-  priceMonthlyCents Int
+  priceMonthlyCents    Int
 
   companyAddOns CompanyAddOn[]
 }
@@ -188,10 +187,10 @@ model CompanyAddOn {
   @@unique([companyId, addOnId])
 }
 
+//
 // -----------------------------
 // Core: Company / Workspace / Event / ApiKey
 // -----------------------------
-
 model Company {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -215,16 +214,22 @@ model Company {
   exportsWarningPercent  Int?
   exportsWarningAbsolute Int?
 
+  webhookUrl    String?
+  webhookSecret String?
+
   stripeCustomerId String?
 
-  workspaces    Workspace[]
-  companyUsers  CompanyUser[]
-  billingMeters BillingMeter[]
-  usageStats    UsageStats[]
-  subscriptions StripeSubscription[]
-  apiKeys       ApiKey[]
-  companyAddOns CompanyAddOn[]
-  apiKeyLogs    ApiKeyLog[]
+  workspaces             Workspace[]
+  companyUsers           CompanyUser[]
+  subscriptions          StripeSubscription[]
+  apiKeys                ApiKey[]
+  companyAddOns          CompanyAddOn[]
+  apiKeyLogs             ApiKeyLog[]
+  usageStatsCompanies    UsageStatsCompany[]
+  usageStatsWorkspaces   UsageStatsWorkspace[]
+  billingMeterCompanies  BillingMeterCompany[]
+  billingMeterWorkspaces BillingMeterWorkspace[]
+  webhookDeliveries      WebhookDelivery[]
 }
 
 model Workspace {
@@ -241,11 +246,11 @@ model Workspace {
   events  Event[]
   apiKeys ApiKey[]
 
-  workspaceUsers WorkspaceUser[]
-  billingMeters  BillingMeter[]
-  usageStats     UsageStats[]
-  subscriptions  StripeSubscription[]
-  apiKeyLogs     ApiKeyLog[]
+  workspaceUsers         WorkspaceUser[]
+  subscriptions          StripeSubscription[]
+  apiKeyLogs             ApiKeyLog[]
+  usageStatsWorkspaces   UsageStatsWorkspace[]
+  billingMeterWorkspaces BillingMeterWorkspace[]
 
   @@index([companyId])
 }
@@ -274,7 +279,8 @@ model Event {
   hash     String
   prevHash String?
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id])
+  webhookDeliveries WebhookDelivery[]
 
   @@index([workspaceId, timestamp])
   @@index([workspaceId, type])
@@ -330,10 +336,10 @@ model ApiKeyLog {
   @@index([workspaceId])
 }
 
+//
 // -----------------------------
 // RBAC
 // -----------------------------
-
 model CompanyUser {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -366,18 +372,58 @@ model WorkspaceUser {
   @@index([userId])
 }
 
+//
 // -----------------------------
-// Billing / Usage
+// Usage (Company & Workspace)
 // -----------------------------
+model UsageStatsCompany {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-model BillingMeter {
+  companyId String
+  date      DateTime
+
+  eventsIngested Int @default(0)
+  eventsStored   Int @default(0)
+  exportsRun     Int @default(0)
+  activeApiKeys  Int @default(0)
+  seats          Int @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date])
+}
+
+model UsageStatsWorkspace {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId   String
+  workspaceId String
+  date        DateTime
+
+  eventsIngested Int @default(0)
+  eventsStored   Int @default(0)
+  exportsRun     Int @default(0)
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, workspaceId, date])
+}
+
+//
+// -----------------------------
+// Billing Meters
+// -----------------------------
+model BillingMeterCompany {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
   companyId   String
-  workspaceId String?
-
   meterType   MeterType
   periodStart DateTime
   periodEnd   DateTime
@@ -389,39 +435,40 @@ model BillingMeter {
   unitPrice       Float     @default(0)
   lastIncrementAt DateTime?
 
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, workspaceId, meterType, periodStart])
-  @@index([companyId, meterType])
-  @@index([workspaceId])
+  @@unique([companyId, meterType, periodStart])
 }
 
-model UsageStats {
+model BillingMeterWorkspace {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
   companyId   String
-  workspaceId String?
-  date        DateTime
+  workspaceId String
+  meterType   MeterType
 
-  eventsIngested Int @default(0)
-  eventsStored   Int @default(0)
-  seats          Int @default(0)
-  activeApiKeys  Int @default(0)
-  exportsRun     Int @default(0)
+  periodStart DateTime
+  periodEnd   DateTime
 
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  currentValue    Int       @default(0)
+  softThreshold   Int?
+  hardCap         Boolean   @default(true)
+  unitSize        Int       @default(100000)
+  unitPrice       Float     @default(0)
+  lastIncrementAt DateTime?
 
-  @@unique([companyId, workspaceId, date])
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, workspaceId, meterType, periodStart])
 }
 
+//
 // -----------------------------
-// Stripe (Dashboard-side)
+// Stripe (Dashboard)
 // -----------------------------
-
 model StripeSubscription {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -461,4 +508,31 @@ model StripeSubscriptionItem {
   quantity                 Int
 
   @@index([subscriptionId])
+}
+
+//
+// -----------------------------
+// Webhook Delivery
+// -----------------------------
+model WebhookDelivery {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id])
+
+  url           String
+  status        String // SUCCESS | FAILED | PENDING | RETRY
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime?
+
+  payload Json?
+
+  @@index([companyId])
+  @@index([eventId])
 }

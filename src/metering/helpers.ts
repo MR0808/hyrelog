@@ -1,5 +1,5 @@
 // src/lib/metering/helpers.ts
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../lib/prisma';
 
 /**
  * Normalizes dates to midnight UTC for consistent daily tracking.

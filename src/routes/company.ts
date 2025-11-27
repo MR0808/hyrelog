@@ -1,7 +1,6 @@
 // src/routes/company.ts
 import { FastifyInstance } from 'fastify';
-import { getCompanyLimits } from '../lib/metering/helpers';
-import { meterExport } from '../lib/metering';
+import { getCompanyWarnings } from '../metering/company/warnings';
 
 const COMPANY_DEFAULT_LIMIT = 50;
 const COMPANY_MAX_LIMIT = 250;
@@ -10,7 +9,7 @@ export default async function companyRoutes(fastify: FastifyInstance) {
     /**
      * ---------------------------------------------------------
      * GET /v1/company
-     * Company-level metadata + plan limits + usage summary
+     * Company metadata + plan limits + usage + warnings
      * ---------------------------------------------------------
      */
     fastify.get(
@@ -24,11 +23,11 @@ export default async function companyRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            if (api.scope !== 'COMPANY') {
+            if (auth.scope !== 'COMPANY') {
                 return reply
                     .status(403)
                     .send({ error: 'WORKSPACE_KEY_FORBIDDEN' });
@@ -37,17 +36,43 @@ export default async function companyRoutes(fastify: FastifyInstance) {
             const prisma = fastify.prisma;
 
             const company = await prisma.company.findUnique({
-                where: { id: api.companyId }
+                where: { id: auth.companyId }
             });
 
-            if (!company) return reply.status(404).send({ error: 'NOT_FOUND' });
+            if (!company) {
+                return reply.status(404).send({ error: 'COMPANY_NOT_FOUND' });
+            }
 
-            const limits = await getCompanyLimits(api.companyId);
+            // Latest daily usage row
+            const latestDaily = await prisma.usageStatsCompany.findFirst({
+                where: { companyId: auth.companyId },
+                orderBy: { date: 'desc' }
+            });
+
+            // Latest monthly EVENTS meter
+            const latestEventsMeter =
+                await prisma.billingMeterCompany.findFirst({
+                    where: { companyId: auth.companyId },
+                    orderBy: { periodStart: 'desc' }
+                });
+
+            // warnings (soft/hard)
+            const warnings = await getCompanyWarnings(company.id);
 
             return reply.send({
                 data: {
                     company,
-                    limits
+                    limits: {
+                        eventsPerMonth: company.eventsPerMonth,
+                        exportsPerMonth: company.exportsPerMonth,
+                        retentionDays: company.retentionDays,
+                        unlimitedRetention: company.unlimitedRetention
+                    },
+                    usage: {
+                        latestDaily,
+                        latestEventsMeter,
+                        warnings
+                    }
                 }
             });
         }
@@ -56,7 +81,7 @@ export default async function companyRoutes(fastify: FastifyInstance) {
     /**
      * ---------------------------------------------------------
      * GET /v1/company/workspaces
-     * List all workspaces under company
+     * Paginated workspace listing
      * ---------------------------------------------------------
      */
     fastify.get<{
@@ -67,27 +92,29 @@ export default async function companyRoutes(fastify: FastifyInstance) {
     }>(
         '/v1/company/workspaces',
         {
-            config: {
-                rateLimit: {
-                    max: 30,
-                    timeWindow: '1 minute'
-                }
-            },
             schema: {
                 querystring: {
                     type: 'object',
                     properties: {
                         cursor: { type: 'string' },
                         limit: { type: ['string', 'number'] }
-                    }
+                    },
+                    additionalProperties: true
+                }
+            },
+            config: {
+                rateLimit: {
+                    max: 30,
+                    timeWindow: '1 minute'
                 }
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
-            if (api.scope !== 'COMPANY') {
+
+            if (auth.scope !== 'COMPANY') {
                 return reply
                     .status(403)
                     .send({ error: 'WORKSPACE_KEY_FORBIDDEN' });
@@ -95,18 +122,18 @@ export default async function companyRoutes(fastify: FastifyInstance) {
 
             const prisma = fastify.prisma;
 
-            const limitInput = request.query.limit;
+            const rawLimit = request.query.limit;
             let limit =
-                limitInput !== undefined
-                    ? Number(limitInput)
+                rawLimit !== undefined
+                    ? Number(rawLimit)
                     : COMPANY_DEFAULT_LIMIT;
 
-            limit = Math.min(Math.max(1, limit), COMPANY_MAX_LIMIT);
+            limit = Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT);
 
             const cursor = request.query.cursor;
 
             const workspaces = await prisma.workspace.findMany({
-                where: { companyId: api.companyId },
+                where: { companyId: auth.companyId },
                 take: limit,
                 ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
                 orderBy: { createdAt: 'asc' }
@@ -127,7 +154,7 @@ export default async function companyRoutes(fastify: FastifyInstance) {
     /**
      * ---------------------------------------------------------
      * GET /v1/company/workspaces/:id
-     * Detailed workspace info (company scoped)
+     * Fetch single workspace with optional usage
      * ---------------------------------------------------------
      */
     fastify.get(
@@ -141,38 +168,60 @@ export default async function companyRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            if (api.scope !== 'COMPANY') {
+            if (auth.scope !== 'COMPANY') {
                 return reply
                     .status(403)
                     .send({ error: 'WORKSPACE_KEY_FORBIDDEN' });
             }
 
             const prisma = fastify.prisma;
-
-            const id = (request.params as any).id as string;
+            const { id } = request.params as { id: string };
 
             const ws = await prisma.workspace.findUnique({
                 where: { id }
             });
 
-            if (!ws) return reply.status(404).send({ error: 'NOT_FOUND' });
+            if (!ws)
+                return reply.status(404).send({ error: 'WORKSPACE_NOT_FOUND' });
 
-            if (ws.companyId !== api.companyId) {
+            if (ws.companyId !== auth.companyId) {
                 return reply.status(403).send({ error: 'FORBIDDEN' });
             }
 
-            return reply.send({ data: ws });
+            const latestDaily = await prisma.usageStatsWorkspace.findFirst({
+                where: { companyId: auth.companyId, workspaceId: ws.id },
+                orderBy: { date: 'desc' }
+            });
+
+            const latestEventsMeter =
+                await prisma.billingMeterWorkspace.findFirst({
+                    where: {
+                        companyId: auth.companyId,
+                        workspaceId: ws.id
+                    },
+                    orderBy: { periodStart: 'desc' }
+                });
+
+            return reply.send({
+                data: {
+                    workspace: ws,
+                    usage: {
+                        latestDaily,
+                        latestEventsMeter
+                    }
+                }
+            });
         }
     );
 
     /**
      * ---------------------------------------------------------
      * GET /v1/company/usage
-     * Returns metered usage (events, exports)
+     * Fetch all meters + daily usage (90 days)
      * ---------------------------------------------------------
      */
     fastify.get(
@@ -186,11 +235,11 @@ export default async function companyRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const api = request.auth;
-            if (!api)
+            const auth = request.auth;
+            if (!auth)
                 return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            if (api.scope !== 'COMPANY') {
+            if (auth.scope !== 'COMPANY') {
                 return reply
                     .status(403)
                     .send({ error: 'WORKSPACE_KEY_FORBIDDEN' });
@@ -198,12 +247,23 @@ export default async function companyRoutes(fastify: FastifyInstance) {
 
             const prisma = fastify.prisma;
 
-            const usage = await prisma.billingMeter.findMany({
-                where: { companyId: api.companyId },
+            const meters = await prisma.billingMeterCompany.findMany({
+                where: { companyId: auth.companyId },
                 orderBy: { periodStart: 'desc' }
             });
 
-            return reply.send({ data: usage });
+            const daily = await prisma.usageStatsCompany.findMany({
+                where: { companyId: auth.companyId },
+                orderBy: { date: 'desc' },
+                take: 90
+            });
+
+            return reply.send({
+                data: {
+                    meters,
+                    daily
+                }
+            });
         }
     );
 }
