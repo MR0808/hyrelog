@@ -1,16 +1,37 @@
 // src/routes/workspaces.ts
-
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../lib/prisma';
+
+const WORKSPACE_DEFAULT_LIMIT = 200;
+const WORKSPACE_MAX_LIMIT = 500;
 
 const COMPANY_DEFAULT_LIMIT = 50;
 const COMPANY_MAX_LIMIT = 250;
 
-export async function workspaceRoutes(fastify: FastifyInstance) {
-    fastify.get(
+export default async function workspaceRoutes(fastify: FastifyInstance) {
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces
+     * Company key → list all workspaces
+     * Workspace key → only its own
+     * ---------------------------------------------------------
+     */
+    fastify.get<{
+        Querystring: {
+            cursor?: string;
+            limit?: string | number;
+        };
+    }>(
         '/v1/workspaces',
         {
-            preHandler: fastify.authenticate,
+            schema: {
+                querystring: {
+                    type: 'object',
+                    properties: {
+                        cursor: { type: 'string' },
+                        limit: { type: ['string', 'number'] }
+                    }
+                }
+            },
             config: {
                 rateLimit: {
                     max: 30,
@@ -19,130 +40,100 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
             }
         },
         async (request, reply) => {
-            const {
-                scope,
-                companyId,
-                workspaceId: apiWorkspaceId
-            } = request.auth!;
-            const q = request.query as any;
+            const api = request.auth;
+            if (!api)
+                return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            // adjust rate limit per scope
-            const cfg = request.routeOptions.config;
-            if (cfg.rateLimit) {
-                cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 30;
-            }
+            const prisma = fastify.prisma;
 
-            // -----------------------
-            // WORKSPACE SCOPED
-            // -----------------------
-            if (scope === 'WORKSPACE') {
-                if (!apiWorkspaceId) {
-                    return reply.code(403).send({
-                        error: 'Invalid workspace API key (missing workspaceId)'
-                    });
-                }
+            // Determine limit
+            const limitInput = request.query.limit;
+            let limit =
+                limitInput !== undefined
+                    ? Number(limitInput)
+                    : api.scope === 'COMPANY'
+                    ? COMPANY_DEFAULT_LIMIT
+                    : WORKSPACE_DEFAULT_LIMIT;
 
-                const ws = await prisma.workspace.findFirst({
-                    where: { id: apiWorkspaceId, companyId }
+            limit =
+                api.scope === 'COMPANY'
+                    ? Math.min(Math.max(limit, 1), COMPANY_MAX_LIMIT)
+                    : Math.min(Math.max(limit, 1), WORKSPACE_MAX_LIMIT);
+
+            const cursor = request.query.cursor;
+
+            // COMPANY KEY
+            if (api.scope === 'COMPANY') {
+                const workspaces = await prisma.workspace.findMany({
+                    where: { companyId: api.companyId },
+                    take: limit,
+                    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+                    orderBy: { createdAt: 'asc' }
                 });
+
+                const nextCursor =
+                    workspaces.length === limit
+                        ? workspaces[workspaces.length - 1].id
+                        : null;
 
                 return reply.send({
-                    data: ws ? [ws] : [],
-                    pagination: {
-                        total: ws ? 1 : 0,
-                        limit: 1,
-                        nextCursor: null
-                    }
+                    data: workspaces,
+                    nextCursor
                 });
             }
 
-            // -----------------------
-            // COMPANY SCOPED
-            // -----------------------
-            const rawLimit = Number(q.limit ?? COMPANY_DEFAULT_LIMIT);
-            const limit = Math.min(Math.max(rawLimit, 1), COMPANY_MAX_LIMIT);
-
-            const cursor = q.cursor ? { id: q.cursor } : undefined;
-
-            const batch = await prisma.workspace.findMany({
-                where: { companyId },
-                take: limit + 1,
-                cursor,
-                orderBy: { createdAt: 'desc' }
+            // WORKSPACE KEY — only its own workspace
+            const ws = await prisma.workspace.findUnique({
+                where: { id: api.workspaceId! }
             });
 
-            const hasMore = batch.length > limit;
-            const items = hasMore ? batch.slice(0, limit) : batch;
-            const nextCursor = hasMore ? items[items.length - 1].id : null;
-
             return reply.send({
-                data: items,
-                pagination: {
-                    limit,
-                    nextCursor
-                }
+                data: ws ? [ws] : [],
+                nextCursor: null
             });
         }
     );
 
-    // --------------------------------------------------------
-    // GET /v1/workspaces/:workspaceId
-    // --------------------------------------------------------
+    /**
+     * ---------------------------------------------------------
+     * GET /v1/workspaces/:id
+     * Workspace key → only if :id matches
+     * Company key → only if workspace belongs to company
+     * ---------------------------------------------------------
+     */
     fastify.get(
-        '/v1/workspaces/:workspaceId',
+        '/v1/workspaces/:id',
         {
-            preHandler: fastify.authenticate,
             config: {
                 rateLimit: {
-                    max: 20,
+                    max: 30,
                     timeWindow: '1 minute'
                 }
             }
         },
         async (request, reply) => {
-            const {
-                scope,
-                companyId,
-                workspaceId: apiWorkspaceId
-            } = request.auth!;
-            const { workspaceId } = request.params as { workspaceId: string };
+            const api = request.auth;
+            if (!api)
+                return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            const cfg = request.routeOptions.config;
-            if (cfg.rateLimit) {
-                cfg.rateLimit.max = scope === 'WORKSPACE' ? 5 : 20;
+            const prisma = fastify.prisma;
+            const id = (request.params as any).id as string;
+
+            const ws = await prisma.workspace.findUnique({
+                where: { id }
+            });
+
+            if (!ws) return reply.status(404).send({ error: 'NOT_FOUND' });
+
+            if (api.scope === 'WORKSPACE' && api.workspaceId !== ws.id) {
+                return reply.status(403).send({ error: 'FORBIDDEN' });
             }
 
-            if (scope === 'WORKSPACE' && apiWorkspaceId !== workspaceId) {
-                return reply.code(403).send({
-                    error: 'Forbidden: workspace API key cannot view other workspaces'
-                });
+            if (api.scope === 'COMPANY' && ws.companyId !== api.companyId) {
+                return reply.status(403).send({ error: 'FORBIDDEN' });
             }
 
-            const ws = await prisma.workspace.findFirst({
-                where: { id: workspaceId, companyId }
-            });
-
-            if (!ws)
-                return reply.code(404).send({ error: 'Workspace not found' });
-
-            const eventCount = await prisma.event.count({
-                where: { workspaceId }
-            });
-
-            const lastEvent = await prisma.event.findFirst({
-                where: { workspaceId },
-                orderBy: { timestamp: 'desc' }
-            });
-
-            return reply.send({
-                data: {
-                    ...ws,
-                    stats: {
-                        eventCount,
-                        lastEventAt: lastEvent?.timestamp ?? null
-                    }
-                }
-            });
+            return reply.send({ data: ws });
         }
     );
 }

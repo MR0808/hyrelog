@@ -1,131 +1,76 @@
 // src/routes/events/ingest.ts
-
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../../lib/prisma';
 import { EventIngestSchema } from '../../schemas/events';
-import { computeEventHash } from '../../utils/hashchain';
 import { toJson } from '../../utils/toJson';
+import { buildEventHash } from '../../utils/hashchain';
+import { meterEventIngest } from '../../lib/metering';
 
-const MAX_METADATA_BYTES = 25 * 1024; // 25KB
-const MAX_EVENT_BYTES = 100 * 1024; // 100KB
-
-export async function eventIngestRoutes(fastify: FastifyInstance) {
+export default async function ingestRoutes(fastify: FastifyInstance) {
     fastify.post(
         '/v1/events',
         {
-            // Workspace key only
-            preHandler: [
-                fastify.authenticate,
-                fastify.enforceCompanyMeter('EVENTS') // Rate limit event ingestion
-            ]
+            config: {
+                rateLimit: {
+                    max: 60,
+                    timeWindow: '1 minute'
+                }
+            }
         },
         async (request, reply) => {
-            const {
-                scope,
-                companyId,
-                workspaceId: keyWorkspaceId
-            } = request.auth!;
+            const api = request.auth;
+            if (!api)
+                return reply.status(401).send({ error: 'UNAUTHENTICATED' });
 
-            // -------------------------------------
-            // Only WORKSPACE key can ingest events
-            // -------------------------------------
-            if (scope !== 'WORKSPACE' || !keyWorkspaceId) {
-                reply.code(403).send({
-                    error: 'Only workspace API keys may create events'
-                });
-                return;
+            // Only workspace keys may ingest
+            if (api.scope !== 'WORKSPACE') {
+                return reply
+                    .status(403)
+                    .send({ error: 'COMPANY_KEY_CANNOT_INGEST' });
             }
 
-            // -------------------------------------
-            // Validate with Zod v4 (EventIngestSchema)
-            // -------------------------------------
             const parsed = EventIngestSchema.safeParse(request.body);
             if (!parsed.success) {
-                reply.code(400).send({ error: parsed.error.flatten() });
-                return;
-            }
-            const eventData = parsed.data;
-
-            // -------------------------------------
-            // Validate workspace ownership
-            // -------------------------------------
-            const workspace = await prisma.workspace.findFirst({
-                where: {
-                    id: keyWorkspaceId,
-                    companyId
-                }
-            });
-
-            if (!workspace) {
-                reply.code(404).send({ error: 'Workspace not found' });
-                return;
+                return reply.status(400).send(parsed.error);
             }
 
-            // -------------------------------------
-            // Validate payload size (SOC2 / ISO)
-            // -------------------------------------
-            const metaPayload = {
-                metadata: eventData.metadata,
-                before: eventData.before,
-                after: eventData.after
-            };
+            const data = parsed.data;
+            const workspaceId = api.workspaceId!;
+            const prisma = fastify.prisma;
 
-            const metaBytes = Buffer.byteLength(
-                JSON.stringify(metaPayload),
-                'utf8'
-            );
-            if (metaBytes > MAX_METADATA_BYTES) {
-                reply
-                    .code(413)
-                    .send({ error: 'Metadata too large (25KB limit)' });
-                return;
-            }
-
-            const fullBytes = Buffer.byteLength(
-                JSON.stringify(eventData),
-                'utf8'
-            );
-            if (fullBytes > MAX_EVENT_BYTES) {
-                reply
-                    .code(413)
-                    .send({ error: 'Event payload too large (100KB limit)' });
-                return;
-            }
-
-            // -------------------------------------
-            // Build hash chain
-            // -------------------------------------
-            const last = await prisma.event.findFirst({
-                where: { workspaceId: keyWorkspaceId },
+            // Fetch previous event for chain
+            const prevEvent = await prisma.event.findFirst({
+                where: { workspaceId },
                 orderBy: { timestamp: 'desc' }
             });
 
-            const prevHash = last?.hash ?? null;
-            const chainId = last?.chainId ?? keyWorkspaceId;
+            const prevHash = prevEvent?.hash ?? null;
+            const chainId = prevEvent?.chainId ?? crypto.randomUUID();
 
-            const hash = computeEventHash({
-                workspaceId: keyWorkspaceId,
-                ...eventData,
-                chainId,
+            const hash = buildEventHash({
+                type: data.type,
+                actorId: data.actorId,
+                actorType: data.actorType,
+                actorName: data.actorName,
+                actorEmail: data.actorEmail,
+                metadata: data.metadata,
+                before: data.before,
+                after: data.after,
                 prevHash
             });
 
-            // -------------------------------------
-            // Create event
-            // -------------------------------------
-            const created = await prisma.event.create({
+            const event = await prisma.event.create({
                 data: {
-                    workspaceId: keyWorkspaceId,
-                    type: eventData.type,
+                    workspaceId,
+                    type: data.type,
 
-                    actorId: eventData.actorId,
-                    actorType: eventData.actorType,
-                    actorName: eventData.actorName,
-                    actorEmail: eventData.actorEmail,
+                    actorId: data.actorId ?? null,
+                    actorType: data.actorType ?? null,
+                    actorName: data.actorName ?? null,
+                    actorEmail: data.actorEmail ?? null,
 
-                    metadata: toJson(eventData.metadata),
-                    before: toJson(eventData.before),
-                    after: toJson(eventData.after),
+                    metadata: toJson(data.metadata),
+                    before: toJson(data.before),
+                    after: toJson(data.after),
 
                     chainId,
                     prevHash,
@@ -133,17 +78,10 @@ export async function eventIngestRoutes(fastify: FastifyInstance) {
                 }
             });
 
-            // -------------------------------------
-            // Increment usage meter
-            // -------------------------------------
-            await fastify.incrementCompanyMeter(
-                'EVENTS',
-                companyId,
-                keyWorkspaceId,
-                1
-            );
+            // Metering for this event
+            await meterEventIngest(api.companyId, workspaceId);
 
-            reply.code(201).send({ data: created });
+            return reply.status(201).send({ data: event });
         }
     );
 }

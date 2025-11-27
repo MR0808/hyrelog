@@ -1,138 +1,101 @@
 // src/routes/events/export.ts
-
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../../lib/prisma';
 import { EventExportSchema } from '../../schemas/events';
+import { meterExport } from '../../lib/metering';
+import { getCompanyLimits } from '../../lib/metering/helpers';
 
 const MAX_EXPORT_EVENTS = 10_000;
 
-function applyRetention(company: any, from?: Date) {
-    if (company.unlimitedRetention) return from;
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - company.retentionDays * 86400000);
-    return from && from > cutoff ? from : cutoff;
-}
-
-export async function eventExportRoutes(fastify: FastifyInstance) {
+export default async function exportRoutes(fastify: FastifyInstance) {
     fastify.get(
         '/v1/events/export',
         {
-            preHandler: [
-                fastify.authenticate,
-                fastify.enforceCompanyMeter('EXPORTS')
-            ],
             config: {
                 rateLimit: {
-                    max: 10,
+                    max: 20,
                     timeWindow: '1 minute'
                 }
             }
         },
         async (request, reply) => {
+            const api = request.auth;
+            if (!api)
+                return reply.status(401).send({ error: 'UNAUTHENTICATED' });
+
+            const prisma = fastify.prisma;
+
             const parsed = EventExportSchema.safeParse(request.query);
             if (!parsed.success) {
-                return reply.code(400).send({ error: parsed.error.flatten() });
+                return reply.status(400).send(parsed.error);
             }
 
-            const {
-                scope,
-                companyId,
-                workspaceId: apiWorkspaceId
-            } = request.auth!;
-            const { workspaceId, format, type, actorId, from, to, q } =
-                parsed.data;
+            const q = parsed.data;
 
-            const cfg = request.routeOptions.config;
-            if (cfg.rateLimit) {
-                cfg.rateLimit.max = scope === 'WORKSPACE' ? 20 : 10;
+            const companyId = api.companyId;
+            const workspaceId =
+                api.scope === 'WORKSPACE'
+                    ? api.workspaceId!
+                    : q.workspaceId ?? null;
+
+            if (api.scope === 'COMPANY' && !workspaceId) {
+                return reply.status(400).send({
+                    error: 'MUST_SPECIFY_WORKSPACE_FOR_COMPANY_KEY'
+                });
             }
 
-            const company = await prisma.company.findUnique({
-                where: { id: companyId }
-            });
-            if (!company)
-                return reply.code(404).send({ error: 'Company not found' });
+            const limits = await getCompanyLimits(companyId);
+            const retentionCutoff = limits.unlimitedRetention
+                ? null
+                : new Date(
+                      Date.now() - limits.retentionDays * 24 * 60 * 60 * 1000
+                  );
 
-            const requestedFrom = from ? new Date(from) : undefined;
-            const requestedTo = to ? new Date(to) : undefined;
-            const effectiveFrom = applyRetention(company, requestedFrom);
+            const where: any = { workspaceId };
 
-            const where: any = { workspace: { companyId } };
-
-            if (scope === 'WORKSPACE') {
-                if (!apiWorkspaceId) {
-                    return reply
-                        .code(403)
-                        .send({ error: 'Invalid workspace API key' });
-                }
-                where.workspaceId = apiWorkspaceId;
-            } else if (workspaceId) {
-                where.workspaceId = workspaceId;
+            if (retentionCutoff) {
+                where.timestamp = { gte: retentionCutoff };
             }
 
-            if (type) where.type = type;
-            if (actorId) where.actorId = actorId;
-
-            if (effectiveFrom || requestedTo) {
-                where.timestamp = {
-                    ...(effectiveFrom ? { gte: effectiveFrom } : {}),
-                    ...(requestedTo ? { lte: requestedTo } : {})
-                };
-            }
-
-            if (q) {
-                where.OR = [
-                    { type: { contains: q, mode: 'insensitive' } },
-                    { actorName: { contains: q, mode: 'insensitive' } },
-                    { actorEmail: { contains: q, mode: 'insensitive' } }
-                ];
-            }
+            if (q.type) where.type = q.type;
+            if (q.actorId) where.actorId = q.actorId;
 
             const events = await prisma.event.findMany({
                 where,
-                orderBy: { timestamp: 'desc' },
-                take: MAX_EXPORT_EVENTS + 1
+                take: MAX_EXPORT_EVENTS,
+                orderBy: { timestamp: 'asc' }
             });
 
-            const slice = events.slice(0, MAX_EXPORT_EVENTS);
+            // Meter this export
+            await meterExport(companyId, workspaceId);
 
-            await fastify.incrementCompanyMeter(
-                'EXPORTS',
-                companyId,
-                null,
-                slice.length
-            );
+            // Return in requested format
+            switch (q.format) {
+                case 'json':
+                    return reply.send({ data: events });
 
-            if (events.length > MAX_EXPORT_EVENTS) {
-                reply.header('X-HyreLog-Truncated', 'true');
+                case 'ndjson':
+                    reply.header('Content-Type', 'application/x-ndjson');
+                    return reply.send(
+                        events.map((e) => JSON.stringify(e)).join('\n')
+                    );
+
+                case 'csv':
+                    reply.header('Content-Type', 'text/csv');
+                    const header = Object.keys(events[0] || {}).join(',');
+                    const rows = events
+                        .map((e) =>
+                            Object.values(e)
+                                .map((v) => JSON.stringify(v ?? ''))
+                                .join(',')
+                        )
+                        .join('\n');
+                    return reply.send([header, rows].join('\n'));
+
+                default:
+                    return reply
+                        .status(400)
+                        .send({ error: 'UNSUPPORTED_FORMAT' });
             }
-
-            if (format === 'csv') {
-                reply.header('Content-Type', 'text/csv');
-                const header =
-                    'id,timestamp,type,actorId,actorName,actorEmail\n';
-                const csv = slice
-                    .map((e) =>
-                        [
-                            e.id,
-                            e.timestamp.toISOString(),
-                            e.type,
-                            e.actorId ?? '',
-                            e.actorName ?? '',
-                            e.actorEmail ?? ''
-                        ].join(',')
-                    )
-                    .join('\n');
-                return reply.send(header + csv);
-            }
-
-            if (format === 'ndjson') {
-                reply.header('Content-Type', 'application/x-ndjson');
-                const nd = slice.map((e) => JSON.stringify(e)).join('\n');
-                return reply.send(nd);
-            }
-
-            return reply.send({ data: slice });
         }
     );
 }

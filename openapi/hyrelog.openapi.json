@@ -1,0 +1,452 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "HyreLog Data API",
+        "version": "1.0.0",
+        "description": "HyreLog is a secure, immutable audit/event logging API for SaaS and enterprise systems.\n\nThis API allows:\n- Workspace event ingestion\n- Event querying and export\n- Company-wide analytics\n- Workspace information retrieval\n\nAuthentication is handled **exclusively via API Keys**.\n\nThere are two API key scopes:\n- `company` — full read access across all workspaces\n- `workspace` — restricted to a single workspace\n\nAll requests are logged and usage metered."
+    },
+    "servers": [
+        {
+            "url": "https://api.hyrelog.com",
+            "description": "Production"
+        },
+        {
+            "url": "http://localhost:3001",
+            "description": "Local Development"
+        }
+    ],
+    "tags": [
+        { "name": "Company", "description": "Company-level endpoints" },
+        {
+            "name": "Workspaces",
+            "description": "Workspace directory & metadata"
+        },
+        {
+            "name": "Events",
+            "description": "Event ingestion, querying, exporting"
+        }
+    ],
+    "components": {
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "x-api-key",
+                "description": "API Key for authentication"
+            }
+        },
+        "schemas": {
+            "RecursiveJson": {
+                "$id": "RecursiveJson",
+                "description": "Arbitrary JSON structure",
+                "oneOf": [
+                    { "type": "string" },
+                    { "type": "number" },
+                    { "type": "boolean" },
+                    { "type": "null" },
+                    {
+                        "type": "array",
+                        "items": { "$ref": "RecursiveJson" }
+                    },
+                    {
+                        "type": "object",
+                        "additionalProperties": { "$ref": "RecursiveJson" }
+                    }
+                ]
+            },
+
+            "Event": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "workspaceId": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" },
+                    "type": { "type": "string" },
+                    "actorId": { "type": ["string", "null"] },
+                    "actorType": { "type": ["string", "null"] },
+                    "actorName": { "type": ["string", "null"] },
+                    "actorEmail": { "type": ["string", "null"] },
+                    "metadata": { "$ref": "RecursiveJson" },
+                    "before": { "$ref": "RecursiveJson" },
+                    "after": { "$ref": "RecursiveJson" },
+                    "hash": { "type": "string" },
+                    "prevHash": { "type": ["string", "null"] },
+                    "chainId": { "type": "string" }
+                }
+            },
+
+            "Workspace": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "companyId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "slug": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "updatedAt": { "type": "string", "format": "date-time" }
+                }
+            },
+
+            "Company": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "slug": { "type": "string" },
+                    "eventsPerMonth": { "type": "integer" },
+                    "exportsPerMonth": { "type": "integer" },
+                    "retentionDays": { "type": "integer" },
+                    "unlimitedRetention": { "type": "boolean" }
+                }
+            }
+        }
+    },
+
+    "security": [{ "ApiKeyAuth": [] }],
+
+    "paths": {
+        "/v1/company": {
+            "get": {
+                "tags": ["Company"],
+                "summary": "Get company information",
+                "security": [{ "ApiKeyAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "Company details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Company"
+                                }
+                            }
+                        }
+                    },
+                    "403": { "description": "Workspace key cannot access this" }
+                }
+            }
+        },
+
+        "/v1/company/stats": {
+            "get": {
+                "tags": ["Company"],
+                "summary": "Get company-wide aggregated stats",
+                "security": [{ "ApiKeyAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "Stats returned",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "workspaceCount": { "type": "integer" },
+                                        "totalEvents": { "type": "integer" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/v1/workspaces": {
+            "get": {
+                "tags": ["Workspaces"],
+                "summary": "List workspaces (company) or return single workspace (workspace key)",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 250
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Workspace list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Workspace"
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": { "type": "integer" },
+                                                "nextCursor": {
+                                                    "type": ["string", "null"]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/v1/workspaces/{workspaceId}": {
+            "get": {
+                "tags": ["Workspaces"],
+                "summary": "Get a workspace and its stats",
+                "parameters": [
+                    {
+                        "name": "workspaceId",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Workspace details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/Workspace"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "stats": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "eventCount": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "lastEventAt": {
+                                                                    "type": [
+                                                                        "string",
+                                                                        "null"
+                                                                    ],
+                                                                    "format": "date-time"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/v1/events": {
+            "get": {
+                "tags": ["Events"],
+                "summary": "Search, filter, and paginate events",
+                "parameters": [
+                    {
+                        "name": "workspaceId",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "actorId",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated event results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Event"
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "limit": { "type": "integer" },
+                                                "nextCursor": {
+                                                    "type": ["string", "null"]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/v1/events/export": {
+            "get": {
+                "tags": ["Events"],
+                "summary": "Export events (JSON, NDJSON, CSV)",
+                "parameters": [
+                    {
+                        "name": "workspaceId",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "actorId",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["json", "ndjson", "csv"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Exported event data",
+                        "content": {
+                            "application/json": {},
+                            "text/csv": {},
+                            "application/x-ndjson": {}
+                        }
+                    },
+                    "429": { "description": "Export usage limit reached" }
+                }
+            }
+        },
+
+        "/v1/events": {
+            "post": {
+                "tags": ["Events"],
+                "summary": "Ingest a new event",
+                "description": "Workspace API key only.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["type"],
+                                "properties": {
+                                    "type": { "type": "string" },
+                                    "actorId": { "type": "string" },
+                                    "actorType": { "type": "string" },
+                                    "actorName": { "type": "string" },
+                                    "actorEmail": { "type": "string" },
+                                    "metadata": {
+                                        "$ref": "#/components/schemas/RecursiveJson"
+                                    },
+                                    "before": {
+                                        "$ref": "#/components/schemas/RecursiveJson"
+                                    },
+                                    "after": {
+                                        "$ref": "#/components/schemas/RecursiveJson"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Event created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Event"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Company API key cannot ingest events"
+                    },
+                    "429": { "description": "Event usage limit reached" }
+                }
+            }
+        }
+    }
+}

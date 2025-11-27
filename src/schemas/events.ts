@@ -13,8 +13,6 @@ export const EventIngestSchema = z.object({
     actorName: z.string().optional(),
     actorEmail: z.string().optional(),
 
-    // JSON payloads (metadata / before / after)
-    // Validated as arbitrary JSON values via JsonSchema
     metadata: JsonSchema.optional(),
     before: JsonSchema.optional(),
     after: JsonSchema.optional()
@@ -26,7 +24,6 @@ export type EventIngestInput = z.infer<typeof EventIngestSchema>;
 // EVENT QUERY
 // -------------------------------
 export const EventQuerySchema = z.object({
-    // For company-scoped keys, workspaceId can be specified
     workspaceId: z.string().optional(),
     type: z.string().optional(),
     actorId: z.string().optional(),

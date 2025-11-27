@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 /**
- * TypeScript representation of any JSON value.
+ * TypeScript representation of JSON.
  */
 export type Json =
     | string
@@ -13,11 +13,7 @@ export type Json =
     | { [key: string]: Json };
 
 /**
- * Zod schema for any JSON value.
- *
- * - Uses z.lazy for recursion (Zod 4 compatible)
- * - Uses explicit type parameter: ZodType<Json>
- * - Uses correct z.record(keyType, valueType) signature
+ * Recursive Zod schema for JSON values (Zod 4-compatible)
  */
 export const JsonSchema: z.ZodType<Json> = z.lazy(() =>
     z.union([
@@ -26,6 +22,7 @@ export const JsonSchema: z.ZodType<Json> = z.lazy(() =>
         z.boolean(),
         z.null(),
         z.array(JsonSchema),
+        // correct record signature: z.record(keyType, valueType)
         z.record(z.string(), JsonSchema)
     ])
 );

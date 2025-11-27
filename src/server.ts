@@ -1,67 +1,158 @@
 // src/server.ts
-
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import crypto from 'crypto';
 
-import apiKeyAuth from './plugins/api-key-auth';
-import usagePlugin from './plugins/usage-and-logging';
+// Plugins
+import { prismaPlugin } from './plugins/prisma';
+import apiKeyAuthPlugin from './plugins/api-key-auth';
+import apiKeyLoggerPlugin from './plugins/api-key-logger';
 
-import { companyRoutes } from './routes/company';
-import { workspaceRoutes } from './routes/workspaces';
-import { eventIngestRoutes } from './routes/events/ingest';
-import { eventExplorerRoutes } from './routes/events/explorer';
-import { eventExportRoutes } from './routes/events/export';
+// Routes
+import companyRoutes from './routes/company';
+import workspaceRoutes from './routes/workspaces';
+import ingestRoutes from './routes/events/ingest';
+import explorerRoutes from './routes/events/explorer';
+import exportRoutes from './routes/events/export';
 
 export async function buildServer() {
     const fastify = Fastify({
-        logger: true
+        logger: {
+            level: 'info',
+            transport: {
+                target: 'pino-pretty',
+                options: {
+                    colorize: true,
+                    translateTime: 'SYS:standard',
+                    ignore: 'pid,hostname'
+                }
+            }
+        },
+        genReqId: () => crypto.randomUUID()
     });
 
-    // ---------------------------
-    // Security & middleware
-    // ---------------------------
+    // Attach a trace ID to each request (for distributed tracing later)
+    fastify.addHook('onRequest', async (request, reply) => {
+        request.headers['x-trace-id'] =
+            request.headers['x-trace-id'] ?? crypto.randomUUID();
+
+        reply.header('x-trace-id', request.headers['x-trace-id']);
+    });
+
+    // Capture start time for duration logging
+    fastify.addHook('onRequest', async (request) => {
+        (request as any)._startTime = process.hrtime.bigint();
+    });
+
+    fastify.addHook('onResponse', async (request, reply) => {
+        try {
+            const start = (request as any)._startTime as bigint;
+            const end = process.hrtime.bigint();
+            const durationMs = Number(end - start) / 1_000_000;
+
+            fastify.log.info(
+                {
+                    reqId: request.id,
+                    traceId: request.headers['x-trace-id'],
+                    method: request.method,
+                    url: request.url,
+                    status: reply.statusCode,
+                    durationMs: durationMs.toFixed(2)
+                },
+                'request completed'
+            );
+        } catch (_) {
+            // no-op
+        }
+    });
+
+    // Core security middleware
     await fastify.register(cors);
     await fastify.register(helmet);
 
-    await fastify.register(apiKeyAuth);
-    await fastify.register(usagePlugin);
-
-    // Track response time for ApiKeyLog
-    fastify.addHook('onRequest', async (req) => {
-        req.startTime = Date.now();
+    // Global rate limiting (per IP)
+    await fastify.register(rateLimit, {
+        max: 300,
+        timeWindow: '1 minute',
+        allowList: ['127.0.0.1']
     });
 
-    fastify.addHook('onResponse', async (req, reply) => {
-        const end = Date.now();
-        const duration = req.startTime ? end - req.startTime : 0;
-        await fastify.logApiKeyRequest(req, reply, duration);
+    // Prisma DB
+    fastify.register(prismaPlugin);
+
+    // API key authentication middleware
+    fastify.register(apiKeyAuthPlugin);
+
+    // Key Logger
+    fastify.register(apiKeyLoggerPlugin);
+
+    // ---- ROUTES ----
+    fastify.register(companyRoutes);
+    fastify.register(workspaceRoutes);
+    fastify.register(ingestRoutes);
+    fastify.register(explorerRoutes);
+    fastify.register(exportRoutes);
+
+    // ---- ERROR HANDLER ----
+    fastify.setErrorHandler((err: unknown, request, reply) => {
+        const error = err as Record<string, any>;
+
+        const statusCode =
+            typeof error.statusCode === 'number' ? error.statusCode : 500;
+
+        const normalized = {
+            statusCode,
+            message:
+                typeof error.message === 'string'
+                    ? error.message
+                    : 'Internal Server Error',
+            code:
+                typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR',
+            traceId: request.headers['x-trace-id'],
+            requestId: request.id
+        };
+
+        // Log securely (PII-safe)
+        fastify.log.error(
+            {
+                error: normalized,
+                stack: error.stack,
+                method: request.method,
+                url: request.url,
+                scope: request.auth?.scope,
+                apiKeyId: request.auth?.apiKeyId
+            },
+            'unhandled error'
+        );
+
+        return reply.status(statusCode).send(normalized);
     });
 
-    // ---------------------------
-    // Route registration
-    // ---------------------------
-    await fastify.register(companyRoutes);
-    await fastify.register(workspaceRoutes);
-    await fastify.register(eventIngestRoutes);
-    await fastify.register(eventExplorerRoutes);
-    await fastify.register(eventExportRoutes);
+    // ---- NOT FOUND HANDLER ----
+    fastify.setNotFoundHandler((request, reply) => {
+        const traceId = request.headers['x-trace-id'];
+        reply.status(404).send({
+            error: 'NOT_FOUND',
+            message: 'Route not found',
+            traceId
+        });
+    });
 
     return fastify;
 }
 
-// ---------------------------------------------
-// Start server if running directly
-// ---------------------------------------------
+// ---- STANDALONE BOOTSTRAP ----
 if (require.main === module) {
-    (async () => {
-        const app = await buildServer();
-        app.listen({ port: 3001 }, (err) => {
-            if (err) {
-                console.error(err);
-                process.exit(1);
-            }
-            console.log('HyreLog Data API running at http://localhost:3001');
+    buildServer()
+        .then((app) =>
+            app.listen({ port: 3001, host: '0.0.0.0' }).then(() => {
+                app.log.info('HyreLog API server started on port 3001');
+            })
+        )
+        .catch((err) => {
+            console.error(err);
+            process.exit(1);
         });
-    })();
 }

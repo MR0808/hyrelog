@@ -61,7 +61,7 @@ enum ApiKeyScope {
 }
 
 // -----------------------------
-// Auth (used by Next.js app, not this API)
+// Auth (Next.js)
 // -----------------------------
 
 model User {
@@ -135,7 +135,7 @@ model Verification {
 }
 
 // -----------------------------
-// Plans / Add-ons (front-end managed)
+// Plans / Add-ons
 // -----------------------------
 
 model Plan {
@@ -159,7 +159,7 @@ model Plan {
 model AddOn {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   name        String
   slug        String  @unique
@@ -176,7 +176,7 @@ model AddOn {
 model CompanyAddOn {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   companyId String
   addOnId   String
@@ -189,30 +189,27 @@ model CompanyAddOn {
 }
 
 // -----------------------------
-// Core domain: Company / Workspace / Event / ApiKey
+// Core: Company / Workspace / Event / ApiKey
 // -----------------------------
 
 model Company {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   name String
   slug String @unique
 
-  // Plan linkage
   planTier        PlanTier        @default(FREE)
   planId          String?
   plan            Plan?           @relation(fields: [planId], references: [id])
   billingInterval BillingInterval @default(MONTHLY)
 
-  // Effective limits (can be overridden per company)
   eventsPerMonth     Int     @default(50000)
   exportsPerMonth    Int     @default(0)
   retentionDays      Int     @default(7)
   unlimitedRetention Boolean @default(false)
 
-  // Warning thresholds (managed in dashboard)
   eventsWarningPercent   Int?
   eventsWarningAbsolute  Int?
   exportsWarningPercent  Int?
@@ -220,7 +217,6 @@ model Company {
 
   stripeCustomerId String?
 
-  // Relations
   workspaces    Workspace[]
   companyUsers  CompanyUser[]
   billingMeters BillingMeter[]
@@ -234,7 +230,7 @@ model Company {
 model Workspace {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   name String
   slug String @unique
@@ -289,7 +285,7 @@ model Event {
 model ApiKey {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   name  String
   scope ApiKeyScope @default(WORKSPACE)
@@ -335,13 +331,13 @@ model ApiKeyLog {
 }
 
 // -----------------------------
-// RBAC (Dashboard-only)
+// RBAC
 // -----------------------------
 
 model CompanyUser {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   companyId String
   userId    String
@@ -357,7 +353,7 @@ model CompanyUser {
 model WorkspaceUser {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   workspaceId String
   userId      String
@@ -377,7 +373,7 @@ model WorkspaceUser {
 model BillingMeter {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   companyId   String
   workspaceId String?
@@ -404,7 +400,7 @@ model BillingMeter {
 model UsageStats {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   companyId   String
   workspaceId String?
@@ -423,13 +419,13 @@ model UsageStats {
 }
 
 // -----------------------------
-// Stripe (optional, dashboard side)
+// Stripe (Dashboard-side)
 // -----------------------------
 
 model StripeSubscription {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
