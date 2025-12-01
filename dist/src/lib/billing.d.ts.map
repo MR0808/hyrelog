@@ -1,0 +1,1 @@
+{"version":3,"file":"billing.d.ts","sourceRoot":"","sources":["../../../src/lib/billing.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,iBAAiB,EAAE,qBAAqB,EAAE,MAAM,iBAAiB,CAAC;AAgBhF;;GAEG;AACH,eAAO,MAAM,mBAAmB,GAAU,OAAO,qBAAqB,KAAG,OAAO,CAAC,iBAAiB,CAsEjG,CAAC;AAEF;;GAEG;AACH,eAAO,MAAM,gBAAgB,GAAU,OAAO,qBAAqB,KAAG,OAAO,CAAC,IAAI,CAkCjF,CAAC"}

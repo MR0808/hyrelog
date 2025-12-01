@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ApiKeyType {
+  COMPANY
+  WORKSPACE
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum BillingMeterType {
+  EVENTS
+}
+
+model User {
+  id        String        @id @default(cuid())
+  email     String        @unique
+  name      String?
+  imageUrl  String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  companies CompanyUser[]
+  workspaces WorkspaceUser[]
+}
+
+model Company {
+  id                 String                 @id @default(cuid())
+  name               String
+  slug               String                 @unique
+  retentionDays      Int                    @default(90)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  workspaces         Workspace[]
+  projects           Project[]
+  members            CompanyUser[]
+  workspaceMembers   WorkspaceUser[]
+  apiKeys            ApiKey[]
+  apiKeyLogs         ApiKeyLog[]
+  plans              CompanyPlan?
+  addOns             CompanyAddOn[]
+  billingMeters      BillingMeter[]
+  usageStats         UsageStats[]
+  configChangeLogs   ConfigChangeLog[]
+  notificationAlerts NotificationThreshold[]
+  auditEvents        AuditEvent[]
+}
+
+model Workspace {
+  id            String          @id @default(cuid())
+  companyId     String
+  name          String
+  slug          String
+  retentionDays Int?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects      Project[]
+  members       WorkspaceUser[]
+  apiKeys       ApiKey[]
+  apiKeyLogs    ApiKeyLog[]
+  billingMeters BillingMeter[]
+  usageStats    UsageStats[]
+  auditEvents   AuditEvent[]
+  configLogs    ConfigChangeLog[]
+
+  @@unique([companyId, slug])
+}
+
+model Project {
+  id          String     @id @default(cuid())
+  workspaceId String
+  companyId   String
+  name        String
+  slug        String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  events      AuditEvent[]
+
+  @@unique([workspaceId, slug])
+}
+
+model CompanyUser {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+}
+
+model WorkspaceUser {
+  id          String    @id @default(cuid())
+  workspaceId String
+  companyId   String
+  userId      String
+  role        String    @default("member")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Plan {
+  id                String         @id @default(cuid())
+  code              String         @unique
+  name              String
+  description       String?
+  monthlyEventLimit Int
+  retentionDays     Int
+  priceCents        Int
+  active            Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  companies         CompanyPlan[]
+}
+
+model AddOn {
+  id                String          @id @default(cuid())
+  code              String          @unique
+  name              String
+  description       String?
+  eventsBoost       Int             @default(0)
+  retentionBoost    Int             @default(0)
+  priceCents        Int             @default(0)
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  companies         CompanyAddOn[]
+}
+
+model CompanyPlan {
+  id                 String       @id @default(cuid())
+  companyId          String       @unique
+  planId             String
+  billingCycle       BillingCycle @default(MONTHLY)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  company            Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan               Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+}
+
+model CompanyAddOn {
+  id        String   @id @default(cuid())
+  companyId String
+  addOnId   String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  addOn     AddOn    @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, addOnId])
+}
+
+model BillingMeter {
+  id           String           @id @default(cuid())
+  companyId    String
+  workspaceId  String?
+  meterType    BillingMeterType
+  currentValue Int              @default(0)
+  limit        Int
+  periodStart  DateTime
+  periodEnd    DateTime
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace    Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, meterType])
+}
+
+model UsageStats {
+  id             String     @id @default(cuid())
+  companyId      String
+  workspaceId    String?
+  periodStart    DateTime
+  periodEnd      DateTime
+  eventsIngested Int        @default(0)
+  eventsQueried  Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, workspaceId, periodStart, periodEnd])
+}
+
+model ApiKey {
+  id          String     @id @default(cuid())
+  companyId   String
+  workspaceId String?
+  name        String
+  prefix      String     @unique
+  hashedKey   String     @unique
+  type        ApiKeyType
+  readOnly    Boolean    @default(false)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs        ApiKeyLog[]
+}
+
+model ApiKeyLog {
+  id                String     @id @default(cuid())
+  apiKeyId          String
+  companyId         String
+  workspaceId       String?
+  path              String
+  method            String
+  statusCode        Int
+  ip                String
+  userAgent         String?
+  latencyMs         Int
+  requestSizeBytes  Int
+  responseSizeBytes Int
+  createdAt         DateTime   @default(now())
+  apiKey            ApiKey     @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  company           Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace         Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, createdAt])
+}
+
+model AuditEvent {
+  id          String    @id @default(cuid())
+  companyId   String
+  workspaceId String
+  projectId   String?
+  action      String
+  category    String
+  actorId     String?
+  actorEmail  String?
+  actorName   String?
+  targetId    String?
+  targetType  String?
+  payload     Json
+  metadata    Json?
+  hash        String
+  prevHash    String?
+  createdAt   DateTime  @default(now())
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model ConfigChangeLog {
+  id          String     @id @default(cuid())
+  companyId   String
+  workspaceId String?
+  configKey   String
+  oldValue    Json?
+  newValue    Json?
+  changedBy   String
+  createdAt   DateTime   @default(now())
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model NotificationThreshold {
+  id               String           @id @default(cuid())
+  companyId        String
+  meterType        BillingMeterType
+  softLimitPercent Int              @default(75)
+  hardLimitPercent Int              @default(100)
+  channel          String           @default("email")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, meterType])
+}
