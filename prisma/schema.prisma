@@ -51,6 +51,7 @@ model Company {
   configChangeLogs   ConfigChangeLog[]
   notificationAlerts NotificationThreshold[]
   auditEvents        AuditEvent[]
+  jobs                Job[]
 }
 
 model Workspace {
@@ -255,6 +256,11 @@ model AuditEvent {
   targetType  String?
   payload     Json
   metadata    Json?
+  /**
+   * Changes array for tracking field updates (e.g., [{field: "name", old: "John", new: "Jane"}]).
+   * Stored as JSON array of {field, old, new} objects.
+   */
+  changes     Json?
   hash        String
   prevHash    String?
   createdAt   DateTime  @default(now())
@@ -291,4 +297,40 @@ model NotificationThreshold {
   company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, meterType])
+}
+
+enum JobType {
+  GDPR_EXPORT
+  GDPR_DELETE
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  companyId  String
+  type        JobType
+  status      JobStatus @default(PENDING)
+  /**
+   * Job parameters stored as JSON (e.g., {scope: "company", format: "json"}).
+   */
+  params      Json?
+  /**
+   * Result data (e.g., export file URL, completion timestamp).
+   */
+  result      Json?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status, createdAt])
+  @@index([status, createdAt])
 }

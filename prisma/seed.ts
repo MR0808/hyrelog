@@ -1,11 +1,15 @@
 import crypto from "node:crypto";
-
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { ApiKeyType, BillingCycle, BillingMeterType, PrismaClient } from "@prisma/client";
 
+import { env } from "@/config/env";
 import { hashApiKey } from "@/lib/apiKeyAuth";
 import { computeEventHash } from "@/lib/hashchain";
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const randomKey = () => `hlk_${crypto.randomBytes(24).toString("hex")}`;
 const keyPrefix = (raw: string) => raw.slice(0, 12);
@@ -243,5 +247,6 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });
 

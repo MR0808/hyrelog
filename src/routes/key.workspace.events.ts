@@ -146,6 +146,9 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
         targetType: payload.target?.type ?? null,
         payload: payload.payload as Prisma.InputJsonValue,
         metadata: (payload.metadata as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+        changes: payload.changes
+          ? (payload.changes as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         hash,
         prevHash,
         createdAt,

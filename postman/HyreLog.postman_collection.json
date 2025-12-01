@@ -1,0 +1,454 @@
+{
+	"info": {
+		"_postman_id": "hyrelog-collection",
+		"name": "HyreLog Data API",
+		"description": "Complete API collection for HyreLog Audit Trail Data API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/healthz",
+							"host": ["{{base_url}}"],
+							"path": ["healthz"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Company Key Endpoints",
+			"item": [
+				{
+					"name": "Get Company Info",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company"]
+						}
+					}
+				},
+				{
+					"name": "List Workspaces",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/workspaces?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "workspaces"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Workspace Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/workspaces/{{workspace_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "workspaces", "{{workspace_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Get Company Events",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/events?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "events"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "action",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "category",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "actorId",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "actorEmail",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "workspaceId",
+									"value": "{{workspace_id}}",
+									"disabled": true
+								},
+								{
+									"key": "projectId",
+									"value": "{{project_id}}",
+									"disabled": true
+								},
+								{
+									"key": "from",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 date string"
+								},
+								{
+									"key": "to",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 date string"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Company Usage",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/usage",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "usage"]
+						}
+					}
+				},
+				{
+					"name": "GDPR Export",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/gdpr/export",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "gdpr", "export"]
+						}
+					}
+				},
+				{
+					"name": "Get Job Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/jobs/{{job_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "jobs", "{{job_id}}"]
+						},
+						"description": "Check the status of a GDPR export job. Use the jobId from the export response."
+					}
+				},
+				{
+					"name": "GDPR Delete (Stub)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{company_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/company/gdpr/delete",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "company", "gdpr", "delete"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Workspace Key Endpoints",
+			"item": [
+				{
+					"name": "Get Workspace Info",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace"]
+						}
+					}
+				},
+				{
+					"name": "Get Workspace Events",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace/events?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace", "events"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "action",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "category",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "actorId",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "actorEmail",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "projectId",
+									"value": "{{project_id}}",
+									"disabled": true
+								},
+								{
+									"key": "from",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 date string"
+								},
+								{
+									"key": "to",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 date string"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Ingest Event (Minimal)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"user.login\",\n  \"category\": \"auth\",\n  \"payload\": {\n    \"ip\": \"192.168.1.1\",\n    \"userAgent\": \"Mozilla/5.0\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace/events",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace", "events"]
+						}
+					}
+				},
+				{
+					"name": "Ingest Event (Full)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"invoice.created\",\n  \"category\": \"billing\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"target\": {\n    \"id\": \"invoice-456\",\n    \"type\": \"invoice\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"amount\": 99.99,\n    \"currency\": \"USD\",\n    \"status\": \"pending\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace/events",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace", "events"]
+						}
+					}
+				},
+				{
+					"name": "Ingest Event (With Project)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"project.deployed\",\n  \"category\": \"deployment\",\n  \"actor\": {\n    \"id\": \"deploy-bot\",\n    \"email\": \"deploy@example.com\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"environment\": \"production\",\n    \"version\": \"v1.2.3\",\n    \"commit\": \"abc123\"\n  },\n  \"metadata\": {\n    \"ci\": \"github-actions\",\n    \"runId\": \"123456\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace/events",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace", "events"]
+						}
+					}
+				},
+				{
+					"name": "Ingest Event (With Changes)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-hyrelog-key",
+								"value": "{{workspace_1_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"user.updated\",\n  \"category\": \"user\",\n  \"actor\": {\n    \"id\": \"admin-123\",\n    \"email\": \"admin@example.com\",\n    \"name\": \"Admin User\"\n  },\n  \"target\": {\n    \"id\": \"user-456\",\n    \"type\": \"user\"\n  },\n  \"changes\": [\n    {\n      \"field\": \"name\",\n      \"old\": \"John Doe\",\n      \"new\": \"Jane Doe\"\n    },\n    {\n      \"field\": \"email\",\n      \"old\": \"john@example.com\",\n      \"new\": \"jane@example.com\"\n    }\n  ],\n  \"payload\": {\n    \"userId\": \"user-456\"\n  },\n  \"metadata\": {\n    \"source\": \"admin-panel\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/key/workspace/events",
+							"host": ["{{base_url}}"],
+							"path": ["v1", "key", "workspace", "events"]
+						},
+						"description": "Example of ingesting an event with old/new value tracking for field changes."
+					}
+				}
+			]
+		},
+		{
+			"name": "OpenAPI",
+			"item": [
+				{
+					"name": "Get OpenAPI Schema",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/openapi.json",
+							"host": ["{{base_url}}"],
+							"path": ["openapi.json"]
+						}
+					}
+				}
+			]
+		}
+	]
+}
+

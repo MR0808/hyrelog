@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { ApiKeyType } from "@prisma/client";
+import { ApiKeyType, JobType } from "@prisma/client";
 
 import { authenticateApiKey } from "@/lib/apiKeyAuth";
 import { prisma } from "@/lib/prisma";
@@ -108,12 +108,45 @@ export const keyCompanyRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/v1/key/company/gdpr/export", async (request) => {
     const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
+
+    const job = await prisma.job.create({
+      data: {
+        companyId: ctx.company.id,
+        type: "GDPR_EXPORT",
+        status: "PENDING",
+        params: {
+          scope: "company",
+          format: "json",
+        },
+      },
+    });
+
     return {
+      jobId: job.id,
       status: "queued",
       scope: "company",
       companyId: ctx.company.id,
       message: "GDPR export queued for processing",
+      createdAt: job.createdAt,
     };
+  });
+
+  app.get("/v1/key/company/jobs/:jobId", async (request, reply) => {
+    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
+    const { jobId } = request.params as { jobId: string };
+
+    const job = await prisma.job.findFirst({
+      where: {
+        id: jobId,
+        companyId: ctx.company.id,
+      },
+    });
+
+    if (!job) {
+      throw reply.notFound("Job not found");
+    }
+
+    return job;
   });
 
   app.post("/v1/key/company/gdpr/delete", async (request) => {
