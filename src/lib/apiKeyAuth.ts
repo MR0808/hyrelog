@@ -80,7 +80,9 @@ export const authenticateApiKey = async (
     workspace: apiKey.workspace,
   };
 
-  enforceRateLimit(request, `key:${apiKey.id}`, env.RATE_LIMIT_PER_KEY);
+  // Check for custom per-key rate limit (could be stored in API key metadata)
+  // For now, use default limit
+  enforceRateLimit(request, `key:${apiKey.id}`, env.RATE_LIMIT_PER_KEY, reply);
   request.apiKeyContext = context;
   return context;
 };

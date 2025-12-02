@@ -1,0 +1,45 @@
+{
+  "name": "@hyrelog/cli",
+  "version": "1.0.0",
+  "description": "HyreLog CLI tool for development and management",
+  "type": "module",
+  "bin": {
+    "hyrelog": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "hyrelog",
+    "cli",
+    "audit",
+    "logging"
+  ],
+  "author": "HyreLog",
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "commander": "^12.0.0",
+    "inquirer": "^10.2.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.1.1",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.21",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+

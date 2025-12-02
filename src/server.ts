@@ -14,6 +14,9 @@ import { keyWorkspaceRoutes } from "@/routes/key.workspace";
 import { keyWorkspaceEventsRoutes } from "@/routes/key.workspace.events";
 import { keyWorkspaceExportsRoutes } from "@/routes/key.workspace.exports";
 import { keyWorkspaceTailRoutes } from "@/routes/key.workspace.tail";
+import { keyWorkspaceSchemasRoutes } from "@/routes/key.workspace.schemas"; // Phase 4: Schema Registry
+import { keyWorkspaceRateLimitRoutes } from "@/routes/key.workspace.rate-limit"; // Phase 4: Rate Limits
+import { keyCompanyRateLimitRoutes } from "@/routes/key.company.rate-limit"; // Phase 4: Rate Limits
 import { internalMetricsRoutes } from "@/routes/internal.metrics";
 import { internalHealthRoutes } from "@/routes/internal.health";
 import { internalRegionHealthRoutes } from "@/routes/internal.region-health";
@@ -39,7 +42,7 @@ app.addHook("onRequest", async (request, reply) => {
     ...(typeof userAgentHeader === "string" ? { userAgent: userAgentHeader } : {}),
   };
 
-  enforceRateLimit(request, `ip:${request.ip}`, env.RATE_LIMIT_PER_IP);
+  enforceRateLimit(request, `ip:${request.ip}`, env.RATE_LIMIT_PER_IP, reply);
   reply.header("x-request-id", request.id);
 });
 
@@ -61,6 +64,9 @@ app.register(keyWorkspaceRoutes);
 app.register(keyWorkspaceEventsRoutes);
 app.register(keyWorkspaceExportsRoutes);
 app.register(keyWorkspaceTailRoutes);
+app.register(keyWorkspaceSchemasRoutes); // Phase 4: Schema Registry
+app.register(keyWorkspaceRateLimitRoutes); // Phase 4: Rate Limits
+app.register(keyCompanyRateLimitRoutes); // Phase 4: Rate Limits
 app.register(internalMetricsRoutes);
 app.register(internalHealthRoutes);
 app.register(internalRegionHealthRoutes);

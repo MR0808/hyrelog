@@ -4,11 +4,23 @@ import { env, isProduction } from "@/config/env";
 import { keyCompanyRoutes } from "@/routes/key.company";
 import { keyCompanyEventsRoutes } from "@/routes/key.company.events";
 import { keyCompanyUsageRoutes } from "@/routes/key.company.usage";
+import { keyCompanyExportsRoutes } from "@/routes/key.company.exports";
+import { keyCompanyArchiveRoutes } from "@/routes/key.company.archive";
+import { keyCompanyGlobalRoutes } from "@/routes/key.company.global";
+import { keyCompanyRegionsRoutes } from "@/routes/key.company.regions";
 import { keyWorkspaceRoutes } from "@/routes/key.workspace";
 import { keyWorkspaceEventsRoutes } from "@/routes/key.workspace.events";
+import { keyWorkspaceExportsRoutes } from "@/routes/key.workspace.exports";
+import { keyWorkspaceTailRoutes } from "@/routes/key.workspace.tail";
+import { keyWorkspaceSchemasRoutes } from "@/routes/key.workspace.schemas"; // Phase 4: Schema Registry
+import { internalMetricsRoutes } from "@/routes/internal.metrics";
+import { internalHealthRoutes } from "@/routes/internal.health";
+import { internalRegionHealthRoutes } from "@/routes/internal.region-health";
 import { prisma } from "@/lib/prisma";
 import { rateLimiter } from "@/lib/rateLimit";
 import { buildOpenApiDocument } from "@/openapi/openapi";
+import { initOtel } from "@/lib/otel";
+import { startCronJobs } from "@/lib/cronScheduler";
 const app = fastify({
     logger: {
         level: isProduction ? "info" : "debug",
@@ -33,8 +45,18 @@ app.get("/openapi.json", async () => buildOpenApiDocument());
 app.register(keyCompanyRoutes);
 app.register(keyCompanyEventsRoutes);
 app.register(keyCompanyUsageRoutes);
+app.register(keyCompanyExportsRoutes);
+app.register(keyCompanyArchiveRoutes);
+app.register(keyCompanyGlobalRoutes);
+app.register(keyCompanyRegionsRoutes);
 app.register(keyWorkspaceRoutes);
 app.register(keyWorkspaceEventsRoutes);
+app.register(keyWorkspaceExportsRoutes);
+app.register(keyWorkspaceTailRoutes);
+app.register(keyWorkspaceSchemasRoutes); // Phase 4: Schema Registry
+app.register(internalMetricsRoutes);
+app.register(internalHealthRoutes);
+app.register(internalRegionHealthRoutes);
 app.addHook("onResponse", async (request, reply) => {
     if (!request.apiKeyContext) {
         return;
@@ -51,12 +73,12 @@ app.addHook("onResponse", async (request, reply) => {
         data: {
             apiKeyId: request.apiKeyContext.apiKey.id,
             companyId: request.apiKeyContext.company.id,
-            workspaceId: request.apiKeyContext.workspace?.id,
+            workspaceId: request.apiKeyContext.workspace?.id ?? null,
             path: request.routeOptions?.url ?? request.url,
             method: request.method,
             statusCode: reply.statusCode,
             ip: request.requestMeta?.clientIp ?? request.ip,
-            userAgent: request.requestMeta?.userAgent,
+            userAgent: request.requestMeta?.userAgent ?? null,
             latencyMs: latency,
             requestSizeBytes: Number.isFinite(requestSize) ? requestSize : 0,
             responseSizeBytes: Number.isFinite(responseSize) ? responseSize : 0,
@@ -72,6 +94,10 @@ const enforceRateLimit = (request, identifier, limit) => {
 };
 const start = async () => {
     try {
+        // Initialize OpenTelemetry
+        initOtel();
+        // Start cron jobs
+        startCronJobs();
         await app.listen({ port: env.PORT, host: env.HOST });
         app.log.info(`HyreLog Data API listening on ${env.HOST}:${env.PORT}`);
     }

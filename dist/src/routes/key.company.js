@@ -1,4 +1,4 @@
-import { ApiKeyType } from "@prisma/client";
+import { ApiKeyType, JobType } from "@prisma/client";
 import { authenticateApiKey } from "@/lib/apiKeyAuth";
 import { prisma } from "@/lib/prisma";
 import { resolvePagination } from "@/lib/pagination";
@@ -94,21 +94,39 @@ export const keyCompanyRoutes = async (app) => {
     });
     app.post("/v1/key/company/gdpr/export", async (request) => {
         const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
+        const job = await prisma.job.create({
+            data: {
+                companyId: ctx.company.id,
+                type: "GDPR_EXPORT",
+                status: "PENDING",
+                params: {
+                    scope: "company",
+                    format: "json",
+                },
+            },
+        });
         return {
+            jobId: job.id,
             status: "queued",
             scope: "company",
             companyId: ctx.company.id,
             message: "GDPR export queued for processing",
+            createdAt: job.createdAt,
         };
     });
-    app.post("/v1/key/company/gdpr/delete", async (request) => {
+    app.get("/v1/key/company/jobs/:jobId", async (request, reply) => {
         const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
-        return {
-            status: "accepted",
-            scope: "company",
-            companyId: ctx.company.id,
-            message: "GDPR delete request accepted",
-        };
+        const { jobId } = request.params;
+        const job = await prisma.job.findFirst({
+            where: {
+                id: jobId,
+                companyId: ctx.company.id,
+            },
+        });
+        if (!job) {
+            throw reply.notFound("Job not found");
+        }
+        return job;
     });
 };
 //# sourceMappingURL=key.company.js.map

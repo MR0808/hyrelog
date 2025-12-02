@@ -33,7 +33,7 @@ const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 const twoYearsAgo = new Date(now.getTime() - 730 * 24 * 60 * 60 * 1000);
 
 async function main() {
-    console.log('🌱 Seeding HyreLog Phase 3 test data...\n');
+    console.log('🌱 Seeding HyreLog Phase 3 & 4 test data...\n');
 
     // ============================================
     // 0. CLEANUP - Delete all existing data
@@ -46,6 +46,7 @@ async function main() {
     await prisma.thresholdAlert.deleteMany();
     await prisma.workspaceTemplateAssignment.deleteMany();
     await prisma.workspaceTemplate.deleteMany();
+    await prisma.eventSchema.deleteMany(); // Phase 4: Schema Registry
     await prisma.auditEvent.deleteMany();
     await prisma.globalEventIndex.deleteMany();
     await prisma.pendingWrite.deleteMany();
@@ -781,7 +782,182 @@ async function main() {
     );
 
     // ============================================
-    // 13. GDPR REQUESTS (Phase 3)
+    // 13. EVENT SCHEMAS (Phase 4: Schema Registry)
+    // ============================================
+    console.log('📋 Creating event schemas...');
+
+    // Find workspace_1 (Core App) - has strict template
+    const coreAppWorkspace = allWorkspaces.find((w) => w.slug === 'core-app');
+    if (coreAppWorkspace) {
+        // Schema for user.created event
+        await prisma.eventSchema.upsert({
+            where: {
+                workspaceId_eventType_version: {
+                    workspaceId: coreAppWorkspace.id,
+                    eventType: 'user.created',
+                    version: 1
+                }
+            },
+            update: {},
+            create: {
+                workspaceId: coreAppWorkspace.id,
+                eventType: 'user.created',
+                description: 'Schema for user creation events',
+                jsonSchema: {
+                    type: 'object',
+                    required: ['action', 'category', 'actor', 'payload'],
+                    properties: {
+                        action: { type: 'string', const: 'user.created' },
+                        category: { type: 'string', enum: ['auth', 'billing'] },
+                        actor: {
+                            type: 'object',
+                            required: ['id', 'email', 'name'],
+                            properties: {
+                                id: { type: 'string' },
+                                email: { type: 'string', format: 'email' },
+                                name: { type: 'string' }
+                            }
+                        },
+                        payload: {
+                            type: 'object',
+                            required: ['userId'],
+                            properties: {
+                                userId: { type: 'string' },
+                                email: { type: 'string', format: 'email' }
+                            }
+                        },
+                        metadata: {
+                            type: 'object',
+                            required: ['source'],
+                            properties: {
+                                source: { type: 'string' }
+                            }
+                        },
+                        projectId: { type: 'string' }
+                    }
+                },
+                version: 1,
+                isActive: true
+            }
+        });
+
+        // Schema for user.updated event
+        await prisma.eventSchema.upsert({
+            where: {
+                workspaceId_eventType_version: {
+                    workspaceId: coreAppWorkspace.id,
+                    eventType: 'user.updated',
+                    version: 1
+                }
+            },
+            update: {},
+            create: {
+                workspaceId: coreAppWorkspace.id,
+                eventType: 'user.updated',
+                description: 'Schema for user update events',
+                jsonSchema: {
+                    type: 'object',
+                    required: ['action', 'category', 'actor', 'payload', 'changes'],
+                    properties: {
+                        action: { type: 'string', const: 'user.updated' },
+                        category: { type: 'string', enum: ['auth', 'billing'] },
+                        actor: {
+                            type: 'object',
+                            required: ['id', 'email', 'name'],
+                            properties: {
+                                id: { type: 'string' },
+                                email: { type: 'string', format: 'email' },
+                                name: { type: 'string' }
+                            }
+                        },
+                        payload: {
+                            type: 'object',
+                            required: ['userId'],
+                            properties: {
+                                userId: { type: 'string' }
+                            }
+                        },
+                        changes: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                required: ['field', 'old', 'new'],
+                                properties: {
+                                    field: { type: 'string' },
+                                    old: {},
+                                    new: {}
+                                }
+                            }
+                        },
+                        metadata: {
+                            type: 'object',
+                            required: ['source'],
+                            properties: {
+                                source: { type: 'string' }
+                            }
+                        },
+                        projectId: { type: 'string' }
+                    }
+                },
+                version: 1,
+                isActive: true
+            }
+        });
+    }
+
+    // Find workspace_2 (Data Platform) - no strict template, but add a schema anyway
+    const dataPlatformWorkspace = allWorkspaces.find(
+        (w) => w.slug === 'data-platform'
+    );
+    if (dataPlatformWorkspace) {
+        // Schema for data.processed event
+        await prisma.eventSchema.upsert({
+            where: {
+                workspaceId_eventType_version: {
+                    workspaceId: dataPlatformWorkspace.id,
+                    eventType: 'data.processed',
+                    version: 1
+                }
+            },
+            update: {},
+            create: {
+                workspaceId: dataPlatformWorkspace.id,
+                eventType: 'data.processed',
+                description: 'Schema for data processing events',
+                jsonSchema: {
+                    type: 'object',
+                    required: ['action', 'category', 'payload'],
+                    properties: {
+                        action: { type: 'string', const: 'data.processed' },
+                        category: { type: 'string' },
+                        payload: {
+                            type: 'object',
+                            required: ['datasetId', 'recordCount'],
+                            properties: {
+                                datasetId: { type: 'string' },
+                                recordCount: { type: 'number', minimum: 0 },
+                                processingTime: { type: 'number' }
+                            }
+                        },
+                        metadata: {
+                            type: 'object',
+                            properties: {
+                                pipeline: { type: 'string' },
+                                version: { type: 'string' }
+                            }
+                        }
+                    }
+                },
+                version: 1,
+                isActive: true
+            }
+        });
+    }
+
+    console.log('✅ Created event schemas\n');
+
+    // ============================================
+    // 14. GDPR REQUESTS (Phase 3)
     // ============================================
     console.log('🔒 Creating sample GDPR requests...');
 
@@ -957,6 +1133,11 @@ async function main() {
     );
     console.log(`   - Run the archival job to archive them to S3`);
     console.log(`   - Then test the export-archive endpoint to retrieve them`);
+    console.log('\n📋 Schema Registry (Phase 4):');
+    console.log('   - Event schemas created for workspace_1 (Core App)');
+    console.log('   - Event schemas created for workspace_2 (Data Platform)');
+    console.log('   - Test schema validation with: hyrelog schema pull');
+    console.log('   - Test schema push with: hyrelog schema push <schema.json>');
     console.log('\n');
 }
 

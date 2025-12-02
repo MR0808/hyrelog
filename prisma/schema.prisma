@@ -131,6 +131,7 @@ model Workspace {
   configLogs    ConfigChangeLog[]
   webhooks      Webhook[]
   templateAssignments WorkspaceTemplateAssignment[]
+  eventSchemas  EventSchema[]               // Phase 4: Schema Registry
 
   @@unique([companyId, slug])
 }
@@ -552,4 +553,21 @@ model PendingWrite {
 
   @@index([region, createdAt])
   @@index([companyId, createdAt])
+}
+
+model EventSchema {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  eventType     String   // e.g., "user.created", "payment.processed"
+  description   String?
+  jsonSchema    Json     // JSON Schema definition
+  version       Int      @default(1) // Schema version for this eventType
+  isActive      Boolean  @default(true) // Whether this schema is currently active
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, eventType, version])
+  @@index([workspaceId, eventType, isActive])
+  @@index([workspaceId, isActive])
 }

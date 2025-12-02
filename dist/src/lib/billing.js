@@ -26,7 +26,6 @@ export const incrementEventUsage = async (input) => {
         const activeMeter = await tx.billingMeter.findFirst({
             where: meterWhere(input.companyId, now),
             orderBy: { periodEnd: "desc" },
-            lock: { mode: "ForUpdate" },
         });
         if (!activeMeter) {
             throw new Error("Active billing meter not configured");

@@ -1,1 +1,1 @@
-{"version":3,"file":"key.workspace.events.d.ts","sourceRoot":"","sources":["../../../src/routes/key.workspace.events.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,kBAAkB,EAAE,MAAM,SAAS,CAAC;AAalD,eAAO,MAAM,wBAAwB,EAAE,kBAqJtC,CAAC"}
+{"version":3,"file":"key.workspace.events.d.ts","sourceRoot":"","sources":["../../../src/routes/key.workspace.events.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,kBAAkB,EAAE,MAAM,SAAS,CAAC;AAkBlD,eAAO,MAAM,wBAAwB,EAAE,kBAoMtC,CAAC"}

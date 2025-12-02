@@ -1,4 +1,4 @@
-import { Region, PendingWrite } from "@prisma/client";
+import { Region, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPrismaForRegion, getAllRegions } from "@/lib/regionClient";
 

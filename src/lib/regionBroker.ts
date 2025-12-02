@@ -1,4 +1,4 @@
-import { Region, AuditEvent, DataRegion } from "@prisma/client";
+import { Region, DataRegion, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   getPrismaForCompany,
@@ -20,7 +20,7 @@ export async function ingestEventToRegion(
     prevHash: string | null;
     traceId?: string;
   },
-): Promise<AuditEvent> {
+): Promise<Prisma.AuditEventGetPayload<{}>> {
   // Get company's region
   const region = await getRegionForCompany(companyId);
   const regionalPrisma = await getPrismaForRegion(region);
@@ -100,7 +100,7 @@ export async function queryWorkspaceEvents(
     from?: Date;
     to?: Date;
   },
-): Promise<{ events: AuditEvent[]; total: number }> {
+): Promise<{ events: Prisma.AuditEventGetPayload<{}>[]; total: number }> {
   // Get workspace to find company
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
@@ -179,7 +179,7 @@ export async function queryCompanyEvents(
     from?: Date;
     to?: Date;
   },
-): Promise<{ events: AuditEvent[]; total: number }> {
+): Promise<{ events: Prisma.AuditEventGetPayload<{}>[]; total: number }> {
   // Get regional Prisma client
   const regionalPrisma = await getPrismaForCompany(companyId);
 
@@ -252,7 +252,7 @@ export async function queryGlobalEvents(
     from?: Date;
     to?: Date;
   },
-): Promise<{ events: AuditEvent[]; total: number }> {
+): Promise<{ events: Prisma.AuditEventGetPayload<{}>[]; total: number }> {
   // Query GlobalEventIndex for matching event IDs
   const indexWhere: any = {
     companyId,
@@ -314,7 +314,7 @@ export async function queryGlobalEvents(
   }
 
   // Fetch full events from each region
-  const allEvents: AuditEvent[] = [];
+  const allEvents: Prisma.AuditEventGetPayload<{}>[] = [];
   for (const [region, eventIds] of eventsByRegion) {
     const regionalPrisma = await getPrismaForRegion(region);
     const events = await regionalPrisma.auditEvent.findMany({

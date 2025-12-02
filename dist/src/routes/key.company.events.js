@@ -5,6 +5,7 @@ import { buildPaginatedResponse, resolvePagination } from "@/lib/pagination";
 import { getRetentionWindowStart } from "@/lib/retention";
 import { recordQueryUsage } from "@/lib/billing";
 import { eventFilterSchema } from "@/schemas/events";
+import { queryCompanyEvents } from "@/lib/regionBroker";
 export const keyCompanyEventsRoutes = async (app) => {
     app.get("/v1/key/company/events", async (request) => {
         const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
@@ -29,18 +30,22 @@ export const keyCompanyEventsRoutes = async (app) => {
             ...(filters.workspaceId ? { workspaceId: { equals: filters.workspaceId } } : {}),
             ...(filters.projectId ? { projectId: { equals: filters.projectId } } : {}),
         };
-        const [events, total] = await Promise.all([
-            prisma.auditEvent.findMany({
-                where,
-                orderBy: { createdAt: "desc" },
-                skip: pagination.offset,
-                take: pagination.limit,
-            }),
-            prisma.auditEvent.count({ where }),
-        ]);
+        // Use region broker for querying
+        const { events, total } = await queryCompanyEvents(ctx.company.id, {
+            page: pagination.page,
+            limit: pagination.limit,
+            action: filters.action,
+            category: filters.category,
+            actorId: filters.actorId,
+            actorEmail: filters.actorEmail,
+            workspaceId: filters.workspaceId,
+            projectId: filters.projectId,
+            from: createdAtFilter.gte,
+            to: createdAtFilter.lte,
+        });
         await recordQueryUsage({
             companyId: ctx.company.id,
-            workspaceId: filters.workspaceId,
+            workspaceId: filters.workspaceId ?? null,
             amount: events.length,
         });
         return buildPaginatedResponse(events, {

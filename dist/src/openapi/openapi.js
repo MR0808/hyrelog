@@ -18,19 +18,6 @@ export const buildOpenApiDocument = () => ({
             url: "https://api.hyrelog.com",
         },
     ],
-    components: {
-        securitySchemes: {
-            ApiKeyAuth: {
-                type: "apiKey",
-                in: "header",
-                name: "x-hyrelog-key",
-            },
-        },
-        schemas: {
-            IngestEvent: eventIngestSchema,
-            UsageResponse: usageSchema,
-        },
-    },
     paths: {
         "/v1/key/company": {
             get: {
@@ -114,12 +101,13 @@ export const buildOpenApiDocument = () => ({
                 },
             },
         },
-        "/v1/key/company/gdpr/delete": {
-            post: {
+        "/v1/key/company/jobs/{jobId}": {
+            get: {
                 security: [{ ApiKeyAuth: [] }],
-                summary: "Submit GDPR deletion",
+                summary: "Get job status",
+                parameters: [{ name: "jobId", in: "path", required: true, schema: { type: "string" } }],
                 responses: {
-                    "202": { description: "Delete accepted" },
+                    "200": { description: "Job details" },
                 },
             },
         },
@@ -168,6 +156,132 @@ export const buildOpenApiDocument = () => ({
                     "429": { description: "Rate limited" },
                 },
             },
+        },
+        "/v1/key/company/export.json": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Export company events as JSON",
+                parameters: [
+                    { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "action", in: "query", schema: { type: "string" } },
+                    { name: "category", in: "query", schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "JSON export stream" },
+                },
+            },
+        },
+        "/v1/key/company/export.csv": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Export company events as CSV",
+                parameters: [
+                    { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "action", in: "query", schema: { type: "string" } },
+                    { name: "category", in: "query", schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "CSV export stream" },
+                },
+            },
+        },
+        "/v1/key/company/export-archive.json": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Export archived events from S3",
+                parameters: [
+                    { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "workspaceId", in: "query", schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "Archived events JSON stream" },
+                    "403": { description: "S3 archival add-on required" },
+                },
+            },
+        },
+        "/v1/key/workspace/export.json": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Export workspace events as JSON",
+                parameters: [
+                    { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "action", in: "query", schema: { type: "string" } },
+                    { name: "category", in: "query", schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "JSON export stream" },
+                },
+            },
+        },
+        "/v1/key/workspace/export.csv": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Export workspace events as CSV",
+                parameters: [
+                    { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+                    { name: "action", in: "query", schema: { type: "string" } },
+                    { name: "category", in: "query", schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "CSV export stream" },
+                },
+            },
+        },
+        "/v1/key/workspace/events/tail": {
+            get: {
+                security: [{ ApiKeyAuth: [] }],
+                summary: "Stream events via Server-Sent Events (SSE)",
+                responses: {
+                    "200": {
+                        description: "SSE stream",
+                        content: {
+                            "text/event-stream": {},
+                        },
+                    },
+                    "403": { description: "Growth plan+ required" },
+                },
+            },
+        },
+        "/internal/metrics": {
+            get: {
+                security: [{ InternalToken: [] }],
+                summary: "Internal system metrics",
+                responses: {
+                    "200": { description: "Metrics data" },
+                },
+            },
+        },
+        "/internal/health": {
+            get: {
+                security: [{ InternalToken: [] }],
+                summary: "Internal health check",
+                responses: {
+                    "200": { description: "Health status" },
+                },
+            },
+        },
+    },
+    components: {
+        securitySchemes: {
+            ApiKeyAuth: {
+                type: "apiKey",
+                in: "header",
+                name: "x-hyrelog-key",
+            },
+            InternalToken: {
+                type: "apiKey",
+                in: "header",
+                name: "x-internal-token",
+            },
+        },
+        schemas: {
+            IngestEvent: eventIngestSchema,
+            UsageResponse: usageSchema,
         },
     },
 });

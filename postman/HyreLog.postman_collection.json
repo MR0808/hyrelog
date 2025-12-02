@@ -485,8 +485,8 @@
 					}
 				]
 			},
-		{
-			"name": "Workspace Key Endpoints",
+			{
+				"name": "Workspace Key Endpoints",
 			"item": [
 				{
 					"name": "Get Workspace Info",

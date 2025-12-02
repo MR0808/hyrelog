@@ -23,16 +23,16 @@ export declare const billingMeterSchema: z.ZodObject<{
     periodEnd: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     meterType: string;
+    currentValue: number;
+    limit: number;
     periodStart: string;
     periodEnd: string;
-    limit: number;
-    currentValue: number;
 }, {
     meterType: string;
+    currentValue: number;
+    limit: number;
     periodStart: string;
     periodEnd: string;
-    limit: number;
-    currentValue: number;
 }>;
 export declare const usageResponseSchema: z.ZodObject<{
     meter: z.ZodObject<{
@@ -43,16 +43,16 @@ export declare const usageResponseSchema: z.ZodObject<{
         periodEnd: z.ZodString;
     }, "strip", z.ZodTypeAny, {
         meterType: string;
+        currentValue: number;
+        limit: number;
         periodStart: string;
         periodEnd: string;
-        limit: number;
-        currentValue: number;
     }, {
         meterType: string;
+        currentValue: number;
+        limit: number;
         periodStart: string;
         periodEnd: string;
-        limit: number;
-        currentValue: number;
     }>;
     usage: z.ZodObject<{
         periodStart: z.ZodString;
@@ -73,10 +73,10 @@ export declare const usageResponseSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     meter: {
         meterType: string;
+        currentValue: number;
+        limit: number;
         periodStart: string;
         periodEnd: string;
-        limit: number;
-        currentValue: number;
     };
     usage: {
         periodStart: string;
@@ -87,10 +87,10 @@ export declare const usageResponseSchema: z.ZodObject<{
 }, {
     meter: {
         meterType: string;
+        currentValue: number;
+        limit: number;
         periodStart: string;
         periodEnd: string;
-        limit: number;
-        currentValue: number;
     };
     usage: {
         periodStart: string;

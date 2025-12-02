@@ -16,11 +16,24 @@ export declare const targetSchema: z.ZodObject<{
     id: z.ZodOptional<z.ZodOptional<z.ZodString>>;
     type: z.ZodOptional<z.ZodOptional<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
-    id?: string | undefined;
     type?: string | undefined;
+    id?: string | undefined;
 }, {
-    id?: string | undefined;
     type?: string | undefined;
+    id?: string | undefined;
+}>;
+export declare const changeSchema: z.ZodObject<{
+    field: z.ZodString;
+    old: z.ZodOptional<z.ZodAny>;
+    new: z.ZodOptional<z.ZodAny>;
+}, "strip", z.ZodTypeAny, {
+    field: string;
+    old?: any;
+    new?: any;
+}, {
+    field: string;
+    old?: any;
+    new?: any;
 }>;
 export declare const ingestEventSchema: z.ZodObject<{
     action: z.ZodString;
@@ -42,45 +55,72 @@ export declare const ingestEventSchema: z.ZodObject<{
         id: z.ZodOptional<z.ZodOptional<z.ZodString>>;
         type: z.ZodOptional<z.ZodOptional<z.ZodString>>;
     }, "strip", z.ZodTypeAny, {
-        id?: string | undefined;
         type?: string | undefined;
+        id?: string | undefined;
     }, {
-        id?: string | undefined;
         type?: string | undefined;
+        id?: string | undefined;
     }>>;
     projectId: z.ZodOptional<z.ZodString>;
     payload: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodAny>>;
     metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    /**
+     * Changes array for tracking field updates (e.g., user.name: old="John", new="Jane").
+     * Each change represents a field that was modified.
+     */
+    changes: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        field: z.ZodString;
+        old: z.ZodOptional<z.ZodAny>;
+        new: z.ZodOptional<z.ZodAny>;
+    }, "strip", z.ZodTypeAny, {
+        field: string;
+        old?: any;
+        new?: any;
+    }, {
+        field: string;
+        old?: any;
+        new?: any;
+    }>, "many">>;
 }, "strip", z.ZodTypeAny, {
     action: string;
     category: string;
     payload: Record<string, any>;
-    target?: {
-        id?: string | undefined;
-        type?: string | undefined;
-    } | undefined;
     projectId?: string | undefined;
+    metadata?: Record<string, any> | undefined;
+    changes?: {
+        field: string;
+        old?: any;
+        new?: any;
+    }[] | undefined;
     actor?: {
         name?: string | undefined;
         id?: string | undefined;
         email?: string | undefined;
     } | undefined;
-    metadata?: Record<string, any> | undefined;
+    target?: {
+        type?: string | undefined;
+        id?: string | undefined;
+    } | undefined;
 }, {
     action: string;
     category: string;
-    target?: {
-        id?: string | undefined;
-        type?: string | undefined;
-    } | undefined;
     projectId?: string | undefined;
+    payload?: Record<string, any> | undefined;
+    metadata?: Record<string, any> | undefined;
+    changes?: {
+        field: string;
+        old?: any;
+        new?: any;
+    }[] | undefined;
     actor?: {
         name?: string | undefined;
         id?: string | undefined;
         email?: string | undefined;
     } | undefined;
-    payload?: Record<string, any> | undefined;
-    metadata?: Record<string, any> | undefined;
+    target?: {
+        type?: string | undefined;
+        id?: string | undefined;
+    } | undefined;
 }>;
 export type IngestEventInput = z.infer<typeof ingestEventSchema>;
 export declare const eventFilterSchema: z.ZodObject<{
@@ -93,23 +133,23 @@ export declare const eventFilterSchema: z.ZodObject<{
     workspaceId: z.ZodOptional<z.ZodString>;
     projectId: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
+    workspaceId?: string | undefined;
+    projectId?: string | undefined;
+    action?: string | undefined;
+    category?: string | undefined;
+    actorId?: string | undefined;
+    actorEmail?: string | undefined;
     from?: Date | undefined;
-    workspaceId?: string | undefined;
     to?: Date | undefined;
-    action?: string | undefined;
-    category?: string | undefined;
-    actorId?: string | undefined;
-    actorEmail?: string | undefined;
-    projectId?: string | undefined;
 }, {
-    from?: string | undefined;
     workspaceId?: string | undefined;
-    to?: string | undefined;
+    projectId?: string | undefined;
     action?: string | undefined;
     category?: string | undefined;
     actorId?: string | undefined;
     actorEmail?: string | undefined;
-    projectId?: string | undefined;
+    from?: string | undefined;
+    to?: string | undefined;
 }>;
 export type EventFilterInput = z.infer<typeof eventFilterSchema>;
 //# sourceMappingURL=events.d.ts.map

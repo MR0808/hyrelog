@@ -11,29 +11,6 @@ export declare const buildOpenApiDocument: () => {
     servers: {
         url: string;
     }[];
-    components: {
-        securitySchemes: {
-            ApiKeyAuth: {
-                type: string;
-                in: string;
-                name: string;
-            };
-        };
-        schemas: {
-            IngestEvent: import("zod-to-json-schema").JsonSchema7Type & {
-                $schema?: string | undefined;
-                definitions?: {
-                    [key: string]: import("zod-to-json-schema").JsonSchema7Type;
-                } | undefined;
-            };
-            UsageResponse: import("zod-to-json-schema").JsonSchema7Type & {
-                $schema?: string | undefined;
-                definitions?: {
-                    [key: string]: import("zod-to-json-schema").JsonSchema7Type;
-                } | undefined;
-            };
-        };
-    };
     paths: {
         "/v1/key/company": {
             get: {
@@ -182,14 +159,22 @@ export declare const buildOpenApiDocument: () => {
                 };
             };
         };
-        "/v1/key/company/gdpr/delete": {
-            post: {
+        "/v1/key/company/jobs/{jobId}": {
+            get: {
                 security: {
                     ApiKeyAuth: never[];
                 }[];
                 summary: string;
+                parameters: {
+                    name: string;
+                    in: string;
+                    required: boolean;
+                    schema: {
+                        type: string;
+                    };
+                }[];
                 responses: {
-                    "202": {
+                    "200": {
                         description: string;
                     };
                 };
@@ -283,6 +268,222 @@ export declare const buildOpenApiDocument: () => {
                         description: string;
                     };
                 };
+            };
+        };
+        "/v1/key/company/export.json": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                parameters: ({
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format: string;
+                    };
+                } | {
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format?: never;
+                    };
+                })[];
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/v1/key/company/export.csv": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                parameters: ({
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format: string;
+                    };
+                } | {
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format?: never;
+                    };
+                })[];
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/v1/key/company/export-archive.json": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                parameters: ({
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format: string;
+                    };
+                } | {
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format?: never;
+                    };
+                })[];
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                    "403": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/v1/key/workspace/export.json": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                parameters: ({
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format: string;
+                    };
+                } | {
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format?: never;
+                    };
+                })[];
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/v1/key/workspace/export.csv": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                parameters: ({
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format: string;
+                    };
+                } | {
+                    name: string;
+                    in: string;
+                    schema: {
+                        type: string;
+                        format?: never;
+                    };
+                })[];
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/v1/key/workspace/events/tail": {
+            get: {
+                security: {
+                    ApiKeyAuth: never[];
+                }[];
+                summary: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "text/event-stream": {};
+                        };
+                    };
+                    "403": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/internal/metrics": {
+            get: {
+                security: {
+                    InternalToken: never[];
+                }[];
+                summary: string;
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+        "/internal/health": {
+            get: {
+                security: {
+                    InternalToken: never[];
+                }[];
+                summary: string;
+                responses: {
+                    "200": {
+                        description: string;
+                    };
+                };
+            };
+        };
+    };
+    components: {
+        securitySchemes: {
+            ApiKeyAuth: {
+                type: string;
+                in: string;
+                name: string;
+            };
+            InternalToken: {
+                type: string;
+                in: string;
+                name: string;
+            };
+        };
+        schemas: {
+            IngestEvent: import("zod-to-json-schema").JsonSchema7Type & {
+                $schema?: string | undefined;
+                definitions?: {
+                    [key: string]: import("zod-to-json-schema").JsonSchema7Type;
+                } | undefined;
+            };
+            UsageResponse: import("zod-to-json-schema").JsonSchema7Type & {
+                $schema?: string | undefined;
+                definitions?: {
+                    [key: string]: import("zod-to-json-schema").JsonSchema7Type;
+                } | undefined;
             };
         };
     };
