@@ -20,6 +20,27 @@ enum BillingMeterType {
   EVENTS
 }
 
+enum DataRegion {
+  US
+  EU
+  APAC
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum ThresholdType {
+  ABSOLUTE
+  PERCENTAGE
+}
+
+enum AddOnCode {
+  RETENTION_S3_ARCHIVE
+}
+
 model User {
   id        String        @id @default(cuid())
   email     String        @unique
@@ -36,6 +57,7 @@ model Company {
   name               String
   slug               String                 @unique
   retentionDays      Int                    @default(90)
+  dataRegion         DataRegion?            @default(US)
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   workspaces         Workspace[]
@@ -52,17 +74,21 @@ model Company {
   notificationAlerts NotificationThreshold[]
   auditEvents        AuditEvent[]
   jobs                Job[]
+  webhooks           Webhook[]
+  templates          WorkspaceTemplate[]
+  thresholdAlerts    ThresholdAlert[]
+  templateAssignments WorkspaceTemplateAssignment[]
 }
 
 model Workspace {
-  id            String          @id @default(cuid())
+  id            String                      @id @default(cuid())
   companyId     String
   name          String
   slug          String
   retentionDays Int?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+  company       Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   projects      Project[]
   members       WorkspaceUser[]
   apiKeys       ApiKey[]
@@ -71,6 +97,8 @@ model Workspace {
   usageStats    UsageStats[]
   auditEvents   AuditEvent[]
   configLogs    ConfigChangeLog[]
+  webhooks      Webhook[]
+  templateAssignments WorkspaceTemplateAssignment[]
 
   @@unique([companyId, slug])
 }
@@ -132,7 +160,7 @@ model Plan {
 
 model AddOn {
   id                String          @id @default(cuid())
-  code              String          @unique
+  code              AddOnCode       @unique
   name              String
   description       String?
   eventsBoost       Int             @default(0)
@@ -243,33 +271,40 @@ model ApiKeyLog {
 }
 
 model AuditEvent {
-  id          String    @id @default(cuid())
-  companyId   String
-  workspaceId String
-  projectId   String?
-  action      String
-  category    String
-  actorId     String?
-  actorEmail  String?
-  actorName   String?
-  targetId    String?
-  targetType  String?
-  payload     Json
-  metadata    Json?
+  id                String              @id @default(cuid())
+  companyId         String
+  workspaceId       String
+  projectId         String?
+  action            String
+  category          String
+  actorId           String?
+  actorEmail        String?
+  actorName         String?
+  targetId          String?
+  targetType        String?
+  payload           Json
+  metadata          Json?
   /**
    * Changes array for tracking field updates (e.g., [{field: "name", old: "John", new: "Jane"}]).
    * Stored as JSON array of {field, old, new} objects.
    */
-  changes     Json?
-  hash        String
-  prevHash    String?
-  createdAt   DateTime  @default(now())
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changes           Json?
+  hash              String
+  prevHash          String?
+  traceId           String?
+  archived          Boolean             @default(false)
+  archivalCandidate Boolean             @default(false)
+  dataRegion        DataRegion?
+  createdAt         DateTime            @default(now())
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  webhookDeliveries WebhookDelivery[]
 
   @@index([workspaceId, createdAt])
   @@index([projectId, createdAt])
+  @@index([companyId, archived, createdAt])
+  @@index([archivalCandidate, createdAt])
 }
 
 model ConfigChangeLog {
@@ -301,7 +336,6 @@ model NotificationThreshold {
 
 enum JobType {
   GDPR_EXPORT
-  GDPR_DELETE
 }
 
 enum JobStatus {
@@ -333,4 +367,81 @@ model Job {
 
   @@index([companyId, status, createdAt])
   @@index([status, createdAt])
+}
+
+model Webhook {
+  id          String             @id @default(cuid())
+  companyId   String
+  workspaceId String?
+  url         String
+  isActive    Boolean            @default(true)
+  secret      String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries  WebhookDelivery[]
+
+  @@index([companyId, workspaceId, isActive])
+}
+
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  webhookId      String
+  eventId        String
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime?
+  responseStatus Int?
+  responseBody   String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  webhook        Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event          AuditEvent            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, status, nextAttemptAt])
+  @@index([status, nextAttemptAt])
+}
+
+model WorkspaceTemplate {
+  id          String                        @id @default(cuid())
+  companyId   String?
+  name        String
+  config      Json
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+  company     Company?                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignments WorkspaceTemplateAssignment[]
+
+  @@index([companyId])
+}
+
+model WorkspaceTemplateAssignment {
+  id          String             @id @default(cuid())
+  companyId   String
+  workspaceId String
+  templateId  String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template    WorkspaceTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId])
+  @@index([companyId, workspaceId])
+}
+
+model ThresholdAlert {
+  id            String           @id @default(cuid())
+  companyId     String
+  meterType     BillingMeterType
+  thresholdType ThresholdType
+  thresholdValue Int
+  currentValue  Int
+  periodStart   DateTime
+  createdAt     DateTime         @default(now())
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
 }

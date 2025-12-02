@@ -8,6 +8,9 @@ import { prisma } from "@/lib/prisma";
 import { buildPaginatedResponse, resolvePagination, type PaginationQuery } from "@/lib/pagination";
 import { getRetentionWindowStart } from "@/lib/retention";
 import { computeEventHash } from "@/lib/hashchain";
+import { createWebhookDeliveries } from "@/lib/webhooks";
+import { getTraceId } from "@/lib/otel";
+import { getWorkspaceTemplate, validateEventWithTemplate } from "@/lib/templates";
 import { eventFilterSchema, ingestEventSchema } from "@/schemas/events";
 import { BillingLimitError } from "@/types/billing";
 
@@ -76,6 +79,43 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
 
     const payload = ingestEventSchema.parse(request.body);
 
+    // Validate against workspace template if assigned
+    const template = await getWorkspaceTemplate(ctx.workspace.id);
+    if (template) {
+      const input: {
+        action: string;
+        category: string;
+        actor?: { id?: string; email?: string; name?: string } | undefined;
+        metadata?: Record<string, unknown> | undefined;
+        projectId?: string | undefined;
+      } = {
+        action: payload.action,
+        category: payload.category,
+      };
+
+      if (payload.actor) {
+        input.actor = {
+          ...(payload.actor.id ? { id: payload.actor.id } : {}),
+          ...(payload.actor.email ? { email: payload.actor.email } : {}),
+          ...(payload.actor.name ? { name: payload.actor.name } : {}),
+        };
+      }
+      if (payload.metadata) {
+        input.metadata = payload.metadata;
+      }
+      if (payload.projectId) {
+        input.projectId = payload.projectId;
+      }
+
+      const validation = validateEventWithTemplate(input, template);
+
+      if (!validation.valid) {
+        throw request.server.httpErrors.badRequest(
+          `Template validation failed: ${validation.errors.join(", ")}`,
+        );
+      }
+    }
+
     if (payload.projectId) {
       const projectExists = await prisma.project.findFirst({
         where: {
@@ -132,6 +172,9 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
       prevHash,
     );
 
+    const traceId = getTraceId() ?? null;
+    const dataRegion = ctx.company.dataRegion ?? null;
+
     const event = await prisma.auditEvent.create({
       data: {
         companyId: ctx.company.id,
@@ -151,6 +194,8 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
           : Prisma.JsonNull,
         hash,
         prevHash,
+        traceId,
+        dataRegion,
         createdAt,
       },
     });
@@ -158,6 +203,16 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
     await prisma.apiKey.update({
       where: { id: ctx.apiKey.id },
       data: { lastUsedAt: createdAt },
+    });
+
+    // Create webhook deliveries (non-blocking)
+    void createWebhookDeliveries({
+      companyId: ctx.company.id,
+      workspaceId: ctx.workspace.id,
+      eventId: event.id,
+    }).catch((error) => {
+      // Log but don't fail the request
+      request.log.error({ error }, "Failed to create webhook deliveries");
     });
 
     reply.code(201);

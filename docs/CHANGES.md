@@ -52,7 +52,7 @@ The `changes` array is stored in the event record and can be queried along with 
 
 ### Schema Changes
 - Added `Job` model for async job processing
-- Added `JobType` enum: `GDPR_EXPORT`, `GDPR_DELETE`
+- Added `JobType` enum: `GDPR_EXPORT`
 - Added `JobStatus` enum: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
 - Jobs are linked to companies and track processing state
 

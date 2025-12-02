@@ -65,8 +65,8 @@ hlk_a1172bdeb53688003035d0bded3229c9e221c5a849c6cafa
 - `GET /v1/key/company/workspaces/:workspaceId` - Get workspace details with stats
 - `GET /v1/key/company/events` - Query events across all workspaces (with filters)
 - `GET /v1/key/company/usage` - Get usage stats and billing meter info
-- `POST /v1/key/company/gdpr/export` - GDPR export request (stub)
-- `POST /v1/key/company/gdpr/delete` - GDPR delete request (stub)
+- `POST /v1/key/company/gdpr/export` - Queue GDPR export job
+- `GET /v1/key/company/jobs/:jobId` - Get job status
 
 ### Workspace Key Endpoints
 - `GET /v1/key/workspace` - Get workspace info and projects

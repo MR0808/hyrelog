@@ -31,12 +31,11 @@ const run = async () => {
   poll();
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  run().catch((error) => {
-    console.error("Fatal error in job processor:", error);
-    process.exit(1);
-  });
-}
+// Always run when executed directly
+run().catch((error) => {
+  console.error("Fatal error in job processor:", error);
+  process.exit(1);
+});
 
 export { run as startJobProcessor };
 

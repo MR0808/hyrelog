@@ -6,11 +6,19 @@ import { env, isProduction } from "@/config/env";
 import { keyCompanyRoutes } from "@/routes/key.company";
 import { keyCompanyEventsRoutes } from "@/routes/key.company.events";
 import { keyCompanyUsageRoutes } from "@/routes/key.company.usage";
+import { keyCompanyExportsRoutes } from "@/routes/key.company.exports";
+import { keyCompanyArchiveRoutes } from "@/routes/key.company.archive";
 import { keyWorkspaceRoutes } from "@/routes/key.workspace";
 import { keyWorkspaceEventsRoutes } from "@/routes/key.workspace.events";
+import { keyWorkspaceExportsRoutes } from "@/routes/key.workspace.exports";
+import { keyWorkspaceTailRoutes } from "@/routes/key.workspace.tail";
+import { internalMetricsRoutes } from "@/routes/internal.metrics";
+import { internalHealthRoutes } from "@/routes/internal.health";
 import { prisma } from "@/lib/prisma";
 import { rateLimiter } from "@/lib/rateLimit";
 import { buildOpenApiDocument } from "@/openapi/openapi";
+import { initOtel } from "@/lib/otel";
+import { startCronJobs } from "@/lib/cronScheduler";
 
 const app = fastify({
   logger: {
@@ -42,8 +50,14 @@ app.get("/openapi.json", async () => buildOpenApiDocument());
 app.register(keyCompanyRoutes);
 app.register(keyCompanyEventsRoutes);
 app.register(keyCompanyUsageRoutes);
+app.register(keyCompanyExportsRoutes);
+app.register(keyCompanyArchiveRoutes);
 app.register(keyWorkspaceRoutes);
 app.register(keyWorkspaceEventsRoutes);
+app.register(keyWorkspaceExportsRoutes);
+app.register(keyWorkspaceTailRoutes);
+app.register(internalMetricsRoutes);
+app.register(internalHealthRoutes);
 
 app.addHook("onResponse", async (request, reply) => {
   if (!request.apiKeyContext) {
@@ -87,6 +101,12 @@ const enforceRateLimit = (request: FastifyRequest, identifier: string, limit: nu
 
 const start = async () => {
   try {
+    // Initialize OpenTelemetry
+    initOtel();
+
+    // Start cron jobs
+    startCronJobs();
+
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`HyreLog Data API listening on ${env.HOST}:${env.PORT}`);
   } catch (error) {

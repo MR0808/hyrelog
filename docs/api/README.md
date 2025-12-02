@@ -17,8 +17,8 @@ HyreLog exposes a strict API-key–only surface area for ingesting and querying 
 | GET | `/v1/key/company/workspaces/{workspaceId}` | Company | Workspace details and stats |
 | GET | `/v1/key/company/events` | Company | Retention-aware event search |
 | GET | `/v1/key/company/usage` | Company | Billing meter + usage |
-| POST | `/v1/key/company/gdpr/export` | Company | Stub endpoint for export |
-| POST | `/v1/key/company/gdpr/delete` | Company | Stub endpoint for delete |
+| POST | `/v1/key/company/gdpr/export` | Company | Queue GDPR export job |
+| GET | `/v1/key/company/jobs/{jobId}` | Company | Get job status |
 | GET | `/v1/key/workspace` | Workspace | Workspace metadata + projects |
 | GET | `/v1/key/workspace/events` | Workspace | Workspace/project events |
 | POST | `/v1/key/workspace/events` | Workspace | Event ingestion with hash-chain |

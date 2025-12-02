@@ -148,15 +148,5 @@ export const keyCompanyRoutes: FastifyPluginAsync = async (app) => {
 
     return job;
   });
-
-  app.post("/v1/key/company/gdpr/delete", async (request) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
-    return {
-      status: "accepted",
-      scope: "company",
-      companyId: ctx.company.id,
-      message: "GDPR delete request accepted",
-    };
-  });
 };
 
