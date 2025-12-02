@@ -1,39 +1,49 @@
 /**
- * Dev command - Local development simulator
+ * Dev command - Start local development simulator
  * hyrelog dev
  */
 
 import { Command } from "commander";
 import chalk from "chalk";
 import { startDevServer } from "../lib/dev-server.js";
-import { loadProjectConfig } from "../lib/config.js";
+import { EventViewerTUI } from "../lib/tui.js";
 
 export const devCommand = new Command("dev")
-  .description("Start local HyreLog ingestion simulator")
-  .option("-p, --port <port>", "Port to run the simulator on", "4040")
-  .option("--no-ui", "Disable TUI interface")
+  .description("Start local HyreLog development simulator")
+  .option("-p, --port <port>", "Port to run server on", "4040")
+  .option("-k, --key <key>", "Workspace key to use", "dev-workspace-key")
+  .option("--no-ui", "Disable TUI event viewer")
   .action(async (options) => {
-    try {
-      const config = loadProjectConfig();
-      if (!config.workspaceKey) {
-        console.error(chalk.red("No workspace key found. Run 'hyrelog init' first."));
-        process.exit(1);
+    const port = parseInt(options.port, 10);
+    const workspaceKey = options.key;
+    const showUI = options.ui !== false;
+
+    let tui: EventViewerTUI | undefined;
+
+    if (showUI) {
+      try {
+        tui = new EventViewerTUI();
+        console.log(chalk.green("\n✅ TUI Event Viewer started"));
+        console.log(chalk.gray("   Press 'q' to quit, 'c' to clear events\n"));
+      } catch (error) {
+        console.warn(chalk.yellow("⚠️  Could not start TUI, falling back to console output"));
+        console.warn(chalk.gray(error instanceof Error ? error.message : String(error)));
       }
+    }
 
-      console.log(chalk.blue("Starting HyreLog local simulator..."));
-      console.log(chalk.gray(`Port: ${options.port}`));
-      console.log(chalk.gray(`Workspace Key: ${config.workspaceKey.substring(0, 10)}...`));
-      console.log(chalk.yellow("\nPress Ctrl+C to stop\n"));
-
+    try {
       await startDevServer({
-        port: parseInt(options.port, 10),
-        workspaceKey: config.workspaceKey,
-        showUI: options.ui !== false,
+        port,
+        workspaceKey,
+        showUI,
+        tui,
       });
     } catch (error) {
       console.error(chalk.red("Failed to start dev server:"));
       console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+      if (tui) {
+        tui.destroy();
+      }
       process.exit(1);
     }
   });
-

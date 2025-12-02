@@ -12,7 +12,8 @@
         "seed": "tsx prisma/seed.ts",
         "worker": "tsx src/workers/index.ts",
         "worker:webhook": "tsx src/workers/webhookWorker.ts",
-        "worker:jobs": "tsx src/workers/jobProcessor.ts"
+        "worker:jobs": "tsx src/workers/jobProcessor.ts",
+        "docs:generate": "tsx scripts/generate-sdk-docs.ts"
     },
     "keywords": [
         "audit",

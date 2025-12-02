@@ -7,9 +7,10 @@
 
 import http from "http";
 import chalk from "chalk";
+import type { EventViewerTUI } from "./tui";
 
 // Simple in-memory event store for dev server
-interface MockEvent {
+export interface Event {
   id: string;
   action: string;
   category: string;
@@ -20,25 +21,39 @@ interface MockEvent {
 }
 
 class MockEventStore {
-  private events: MockEvent[] = [];
+  private events: Event[] = [];
   private nextId = 1;
+  private listeners: ((event: Event) => void)[] = [];
 
-  add(event: Omit<MockEvent, "id" | "createdAt">): MockEvent {
-    const mockEvent: MockEvent = {
+  add(event: Omit<Event, "id" | "createdAt">): Event {
+    const mockEvent: Event = {
       ...event,
       id: `mock-${this.nextId++}`,
       createdAt: new Date().toISOString(),
     };
     this.events.push(mockEvent);
+    
+    // Notify listeners
+    this.listeners.forEach((listener) => listener(mockEvent));
+    
     return mockEvent;
   }
 
-  getAll(): MockEvent[] {
+  getAll(): Event[] {
     return [...this.events];
   }
 
   count(): number {
     return this.events.length;
+  }
+
+  onEvent(listener: (event: Event) => void): void {
+    this.listeners.push(listener);
+  }
+
+  clear(): void {
+    this.events = [];
+    this.nextId = 1;
   }
 }
 
@@ -46,10 +61,18 @@ export interface DevServerOptions {
   port: number;
   workspaceKey: string;
   showUI: boolean;
+  tui?: EventViewerTUI;
 }
 
 export async function startDevServer(options: DevServerOptions): Promise<void> {
   const store = new MockEventStore();
+  
+  // Setup TUI if enabled
+  if (options.showUI && options.tui) {
+    store.onEvent((event) => {
+      options.tui!.addEvent(event);
+    });
+  }
 
   const server = http.createServer(async (req, res) => {
     // CORS headers
@@ -81,7 +104,9 @@ export async function startDevServer(options: DevServerOptions): Promise<void> {
             metadata: event.metadata,
           });
 
-          console.log(chalk.green("✓ Event ingested:"), chalk.gray(event.action));
+          if (!options.showUI) {
+            console.log(chalk.green("✓ Event ingested:"), chalk.gray(event.action));
+          }
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));

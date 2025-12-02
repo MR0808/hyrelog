@@ -265,21 +265,31 @@ model UsageStats {
 }
 
 model ApiKey {
-  id          String     @id @default(cuid())
-  companyId   String
-  workspaceId String?
-  name        String
-  prefix      String     @unique
-  hashedKey   String     @unique
-  type        ApiKeyType
-  readOnly    Boolean    @default(false)
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  logs        ApiKeyLog[]
+  id                String     @id @default(cuid())
+  companyId         String
+  workspaceId       String?
+  name              String
+  prefix            String     @unique
+  hashedKey         String     @unique
+  type              ApiKeyType
+  readOnly          Boolean    @default(false)
+  lastUsedAt        DateTime?
+  lastUsedIp        String?
+  lastUsedEndpoint  String?
+  healthScore       Int        @default(100) // 0-100, based on usage patterns
+  rotationPolicy    Json?      // { enabled: boolean, intervalDays: number, autoRotate: boolean }
+  labels            String[]   @default([]) // For organization/tagging
+  ipAllowlist       String[]   @default([]) // IP addresses/CIDR blocks allowed
+  expiresAt         DateTime?  // For short-lived keys (CI/CD)
+  revokedAt         DateTime?
+  revokedReason     String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  company           Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace         Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs              ApiKeyLog[]
+  rotatedFrom       String?    // ID of key this was rotated from
+  rotatedTo         String?    // ID of key this was rotated to
 }
 
 model ApiKeyLog {

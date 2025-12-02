@@ -13,6 +13,8 @@ const envSchema = z.object({
   RATE_LIMIT_PER_KEY: z.coerce.number().int().positive().default(1200),
   RATE_LIMIT_PER_IP: z.coerce.number().int().positive().default(600),
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_BURST_MULTIPLIER: z.coerce.number().positive().default(2.0), // Burst limit = limit * multiplier
+  RATE_LIMIT_REFILL_RATE: z.coerce.number().positive().optional(), // Tokens per second (optional, uses leaky bucket if not set)
   BILLING_HARD_CAP_RESPONSE: z.enum(["402", "429"]).default("429"),
   INTERNAL_TOKEN: z.string().min(32).optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),

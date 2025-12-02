@@ -6,6 +6,7 @@ import { env } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { rateLimiter } from "@/lib/rateLimit";
 import type { ApiKeyContext } from "@/types/context";
+import { createAsyncSpan, setSpanAttributes, addSpanEvent } from "@/lib/otel";
 
 export const API_KEY_HEADER = "x-hyrelog-key";
 
@@ -49,22 +50,24 @@ export const authenticateApiKey = async (
   request: FastifyRequest,
   options: ApiKeyAuthOptions = {},
 ): Promise<ApiKeyContext> => {
-  const rawKey = extractRawApiKey(request);
-  if (!rawKey) {
-    throw request.server.httpErrors.unauthorized("API key missing");
-  }
+  return createAsyncSpan("hyrelog.auth.api_key", async (span) => {
+    const rawKey = extractRawApiKey(request);
+    if (!rawKey) {
+      addSpanEvent("hyrelog.auth.missing_key");
+      throw request.server.httpErrors.unauthorized("API key missing");
+    }
 
-  const hashedKey = hashApiKey(rawKey);
-  const apiKey = await prisma.apiKey.findFirst({
-    where: {
-      hashedKey,
-      revokedAt: null,
-    },
-    include: {
-      company: true,
-      workspace: true,
-    },
-  });
+    const hashedKey = hashApiKey(rawKey);
+    const apiKey = await prisma.apiKey.findFirst({
+      where: {
+        hashedKey,
+        revokedAt: null,
+      },
+      include: {
+        company: true,
+        workspace: true,
+      },
+    });
 
   if (!apiKey) {
     throw request.server.httpErrors.unauthorized("Invalid API key");
@@ -87,11 +90,28 @@ export const authenticateApiKey = async (
   return context;
 };
 
-const enforceRateLimit = (request: FastifyRequest, identifier: string, limit: number) => {
+const enforceRateLimit = (
+  request: FastifyRequest,
+  identifier: string,
+  limit: number,
+  reply?: any,
+) => {
   const windowMs = env.RATE_LIMIT_WINDOW_SECONDS * 1000;
   const result = rateLimiter.consume(identifier, { limit, windowMs });
   if (result.limited) {
+    if (reply && result.retryAfter) {
+      reply.header("Retry-After", result.retryAfter.toString());
+      reply.header("X-RateLimit-Limit", limit.toString());
+      reply.header("X-RateLimit-Remaining", "0");
+      reply.header("X-RateLimit-Reset", new Date(result.resetAt).toISOString());
+    }
     throw request.server.httpErrors.tooManyRequests("API key rate limit exceeded");
+  }
+  // Add rate limit headers to successful responses
+  if (reply) {
+    reply.header("X-RateLimit-Limit", limit.toString());
+    reply.header("X-RateLimit-Remaining", result.remaining.toString());
+    reply.header("X-RateLimit-Reset", new Date(result.resetAt).toISOString());
   }
 };
 

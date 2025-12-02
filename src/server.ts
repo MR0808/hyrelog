@@ -17,6 +17,8 @@ import { keyWorkspaceTailRoutes } from "@/routes/key.workspace.tail";
 import { keyWorkspaceSchemasRoutes } from "@/routes/key.workspace.schemas"; // Phase 4: Schema Registry
 import { keyWorkspaceRateLimitRoutes } from "@/routes/key.workspace.rate-limit"; // Phase 4: Rate Limits
 import { keyCompanyRateLimitRoutes } from "@/routes/key.company.rate-limit"; // Phase 4: Rate Limits
+import { keyWorkspaceLifecycleRoutes } from "@/routes/key.workspace.lifecycle"; // Phase 4: API Key Lifecycle
+import { keyCompanyLifecycleRoutes } from "@/routes/key.company.lifecycle"; // Phase 4: API Key Lifecycle
 import { internalMetricsRoutes } from "@/routes/internal.metrics";
 import { internalHealthRoutes } from "@/routes/internal.health";
 import { internalRegionHealthRoutes } from "@/routes/internal.region-health";
@@ -67,11 +69,24 @@ app.register(keyWorkspaceTailRoutes);
 app.register(keyWorkspaceSchemasRoutes); // Phase 4: Schema Registry
 app.register(keyWorkspaceRateLimitRoutes); // Phase 4: Rate Limits
 app.register(keyCompanyRateLimitRoutes); // Phase 4: Rate Limits
+app.register(keyWorkspaceLifecycleRoutes); // Phase 4: API Key Lifecycle
+app.register(keyCompanyLifecycleRoutes); // Phase 4: API Key Lifecycle
 app.register(internalMetricsRoutes);
 app.register(internalHealthRoutes);
 app.register(internalRegionHealthRoutes);
 
 app.addHook("onResponse", async (request, reply) => {
+  // Add rate limit headers if API key context exists
+  if (request.apiKeyContext) {
+    const identifier = `key:${request.apiKeyContext.apiKey.id}`;
+    const status = rateLimiter.getStatus(identifier);
+    if (status) {
+      reply.header("X-RateLimit-Limit", env.RATE_LIMIT_PER_KEY.toString());
+      reply.header("X-RateLimit-Remaining", status.remaining.toString());
+      reply.header("X-RateLimit-Reset", new Date(status.resetAt).toISOString());
+    }
+  }
+
   if (!request.apiKeyContext) {
     return;
   }
