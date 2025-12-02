@@ -21,9 +21,37 @@ enum BillingMeterType {
 }
 
 enum DataRegion {
+  AU
   US
   EU
   APAC
+}
+
+enum Region {
+  AU
+  US
+  EU
+  APAC
+}
+
+enum GdprRequestType {
+  DELETE
+  ANONYMIZE
+}
+
+enum GdprRequestStatus {
+  CUSTOMER_PENDING
+  CUSTOMER_APPROVED
+  ADMIN_PENDING
+  ADMIN_APPROVED
+  PROCESSING
+  DONE
+  REJECTED
+}
+
+enum GdprApprovalType {
+  CUSTOMER_APPROVAL
+  ADMIN_APPROVAL
 }
 
 enum WebhookDeliveryStatus {
@@ -57,7 +85,8 @@ model Company {
   name               String
   slug               String                 @unique
   retentionDays      Int                    @default(90)
-  dataRegion         DataRegion?            @default(US)
+  dataRegion         Region                 @default(AU)
+  replicateTo        Region[]
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   workspaces         Workspace[]
@@ -78,6 +107,9 @@ model Company {
   templates          WorkspaceTemplate[]
   thresholdAlerts    ThresholdAlert[]
   templateAssignments WorkspaceTemplateAssignment[]
+  gdprRequests       GdprRequest[]
+  globalEventIndex   GlobalEventIndex[]
+  pendingWrites      PendingWrite[]
 }
 
 model Workspace {
@@ -295,6 +327,9 @@ model AuditEvent {
   archived          Boolean             @default(false)
   archivalCandidate Boolean             @default(false)
   dataRegion        DataRegion?
+  isWarmArchived    Boolean             @default(false)
+  isColdArchived    Boolean             @default(false)
+  coldArchiveKey    String?
   createdAt         DateTime            @default(now())
   company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -305,6 +340,7 @@ model AuditEvent {
   @@index([projectId, createdAt])
   @@index([companyId, archived, createdAt])
   @@index([archivalCandidate, createdAt])
+  @@index([isColdArchived, createdAt])
 }
 
 model ConfigChangeLog {
@@ -443,5 +479,77 @@ model ThresholdAlert {
   createdAt     DateTime         @default(now())
   company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId, createdAt])
+}
+
+model RegionDataStore {
+  id                  String   @id @default(cuid())
+  region              Region   @unique
+  dbUrl               String
+  readOnlyUrl         String?
+  coldStorageProvider String   // aws, azure, gcp
+  coldStorageBucket   String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model GlobalEventIndex {
+  id            String   @id @default(cuid())
+  companyId     String
+  workspaceId   String
+  projectId     String?
+  dataRegion    Region
+  occurredAt    DateTime
+  action        String
+  category      String
+  actorId       String?
+  actorEmail    String?
+  createdAt     DateTime @default(now())
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, occurredAt])
+  @@index([dataRegion, occurredAt])
+  @@index([workspaceId, occurredAt])
+  @@index([actorEmail, occurredAt])
+  @@index([actorId, occurredAt])
+}
+
+model GdprRequest {
+  id                String             @id @default(cuid())
+  companyId         String
+  requestedByUserId String
+  actorEmail        String?
+  actorId           String?
+  requestType       GdprRequestType
+  status            GdprRequestStatus  @default(CUSTOMER_PENDING)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approvals         GdprRequestApproval[]
+
+  @@index([companyId, status])
+  @@index([status, createdAt])
+}
+
+model GdprRequestApproval {
+  id             String          @id @default(cuid())
+  gdprRequestId  String
+  approvedByUserId String
+  approvalType   GdprApprovalType
+  createdAt      DateTime        @default(now())
+  request        GdprRequest     @relation(fields: [gdprRequestId], references: [id], onDelete: Cascade)
+
+  @@index([gdprRequestId])
+}
+
+model PendingWrite {
+  id          String   @id @default(cuid())
+  companyId   String
+  region      Region
+  eventData   Json
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([region, createdAt])
   @@index([companyId, createdAt])
 }

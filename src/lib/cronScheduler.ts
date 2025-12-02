@@ -10,6 +10,11 @@ import { runTemplateEnforcer } from "@/crons/templateEnforcer";
 import { runAlertTrigger } from "@/crons/alertTrigger";
 import { runMetricsAggregator } from "@/crons/metricsAggregator";
 import { runTailCleaner } from "@/crons/tailCleaner";
+import { runColdArchiveJob } from "@/crons/coldArchiveJob";
+import { runFailoverRecovery } from "@/crons/failoverRecovery";
+import { runRegionHealthCheck } from "@/crons/regionHealthCheck";
+import { processGdprRequests } from "@/workers/gdprWorker";
+import { processReplicationJobs } from "@/workers/replicationWorker";
 
 /**
  * Initializes and starts all cron jobs.
@@ -111,6 +116,55 @@ export const startCronJobs = (): void => {
       await runTailCleaner();
     } catch (error) {
       console.error("Tail cleaner failed:", error);
+    }
+  });
+
+  // Phase 3: Cold archive job: Weekly on Sunday at 3 AM
+  cron.schedule("0 3 * * 0", async () => {
+    console.log("Running cold archive job");
+    try {
+      await runColdArchiveJob();
+    } catch (error) {
+      console.error("Cold archive job failed:", error);
+    }
+  });
+
+  // Phase 3: Failover recovery: Every 5 minutes
+  cron.schedule("*/5 * * * *", async () => {
+    console.log("Running failover recovery job");
+    try {
+      await runFailoverRecovery();
+    } catch (error) {
+      console.error("Failover recovery failed:", error);
+    }
+  });
+
+  // Phase 3: Region health check: Every 1 minute
+  cron.schedule("*/1 * * * *", async () => {
+    try {
+      await runRegionHealthCheck();
+    } catch (error) {
+      console.error("Region health check failed:", error);
+    }
+  });
+
+  // Phase 3: GDPR worker: Every 10 minutes
+  cron.schedule("*/10 * * * *", async () => {
+    console.log("Running GDPR worker");
+    try {
+      await processGdprRequests();
+    } catch (error) {
+      console.error("GDPR worker failed:", error);
+    }
+  });
+
+  // Phase 3: Replication worker: Every 5 minutes
+  cron.schedule("*/5 * * * *", async () => {
+    console.log("Running replication worker");
+    try {
+      await processReplicationJobs();
+    } catch (error) {
+      console.error("Replication worker failed:", error);
     }
   });
 

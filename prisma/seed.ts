@@ -6,9 +6,12 @@ import {
     BillingCycle,
     BillingMeterType,
     DataRegion,
+    Region,
     PrismaClient,
     WebhookDeliveryStatus,
-    ThresholdType
+    ThresholdType,
+    GdprRequestType,
+    GdprRequestStatus
 } from '@prisma/client';
 
 import { env } from '@/config/env';
@@ -30,7 +33,7 @@ const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 const twoYearsAgo = new Date(now.getTime() - 730 * 24 * 60 * 60 * 1000);
 
 async function main() {
-    console.log('🌱 Seeding HyreLog Phase 2 test data...\n');
+    console.log('🌱 Seeding HyreLog Phase 3 test data...\n');
 
     // ============================================
     // 0. CLEANUP - Delete all existing data
@@ -44,6 +47,10 @@ async function main() {
     await prisma.workspaceTemplateAssignment.deleteMany();
     await prisma.workspaceTemplate.deleteMany();
     await prisma.auditEvent.deleteMany();
+    await prisma.globalEventIndex.deleteMany();
+    await prisma.pendingWrite.deleteMany();
+    await prisma.gdprRequestApproval.deleteMany();
+    await prisma.gdprRequest.deleteMany();
     await prisma.apiKeyLog.deleteMany();
     await prisma.apiKey.deleteMany();
     await prisma.usageStats.deleteMany();
@@ -57,11 +64,32 @@ async function main() {
     await prisma.companyUser.deleteMany();
     await prisma.user.deleteMany();
     await prisma.job.deleteMany();
+    // Note: RegionDataStore is not deleted - it's configuration data
 
     console.log('✅ Cleanup complete\n');
 
     // ============================================
-    // 1. PLANS & ADD-ONS
+    // 1. REGION DATA STORE (Phase 3)
+    // ============================================
+    console.log('🌍 Creating region data stores...');
+
+    // Create AU region (primary region)
+    await prisma.regionDataStore.upsert({
+        where: { region: Region.AU },
+        update: {},
+        create: {
+            region: Region.AU,
+            dbUrl: env.DATABASE_URL, // Use same DB for now (AU-first)
+            readOnlyUrl: null,
+            coldStorageProvider: 'aws',
+            coldStorageBucket: env.AWS_S3_BUCKET || 'hyrelog-archives-prod'
+        }
+    });
+
+    console.log('✅ Created region data store (AU)\n');
+
+    // ============================================
+    // 2. PLANS & ADD-ONS
     // ============================================
     console.log('📦 Creating plans and add-ons...');
 
@@ -141,7 +169,8 @@ async function main() {
                 name: 'Acme Corp',
                 slug: 'acme-corp',
                 retentionDays: 365,
-                dataRegion: DataRegion.US
+                dataRegion: Region.AU, // Phase 3: AU-first
+                replicateTo: [] // No replication by default
             }
         }),
         prisma.company.create({
@@ -149,7 +178,8 @@ async function main() {
                 name: 'GlobalTech EU',
                 slug: 'globaltech-eu',
                 retentionDays: 180,
-                dataRegion: DataRegion.EU
+                dataRegion: Region.AU, // Phase 3: AU-first
+                replicateTo: [] // No replication by default
             }
         })
     ]);
@@ -749,6 +779,54 @@ async function main() {
     console.log(
         `✅ Created ${archivedEvents.length} already archived events\n`
     );
+
+    // ============================================
+    // 13. GDPR REQUESTS (Phase 3)
+    // ============================================
+    console.log('🔒 Creating sample GDPR requests...');
+
+    // Create a test user for GDPR requests
+    const testUser = await prisma.user.upsert({
+        where: { email: 'gdpr-admin@example.com' },
+        update: {},
+        create: {
+            email: 'gdpr-admin@example.com',
+            name: 'GDPR Admin'
+        }
+    });
+
+    // Sample GDPR request: Customer pending
+    const gdprRequest1 = await prisma.gdprRequest.create({
+        data: {
+            companyId: acmeCorp.id,
+            requestedByUserId: testUser.id,
+            actorEmail: 'user@example.com',
+            requestType: GdprRequestType.ANONYMIZE,
+            status: GdprRequestStatus.CUSTOMER_PENDING
+        }
+    });
+
+    // Sample GDPR request: Customer approved, waiting for admin
+    const gdprRequest2 = await prisma.gdprRequest.create({
+        data: {
+            companyId: acmeCorp.id,
+            requestedByUserId: testUser.id,
+            actorId: 'actor-1',
+            requestType: GdprRequestType.DELETE,
+            status: GdprRequestStatus.CUSTOMER_APPROVED
+        }
+    });
+
+    // Add customer approval for request 2
+    await prisma.gdprRequestApproval.create({
+        data: {
+            gdprRequestId: gdprRequest2.id,
+            approvedByUserId: testUser.id,
+            approvalType: 'CUSTOMER_APPROVAL'
+        }
+    });
+
+    console.log(`✅ Created ${2} sample GDPR requests\n`);
 
     // Update billing meter with total ingested events
     const totalEvents =

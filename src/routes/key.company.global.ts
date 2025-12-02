@@ -1,16 +1,19 @@
 import type { FastifyPluginAsync } from "fastify";
-import { ApiKeyType, Prisma } from "@prisma/client";
+import { ApiKeyType } from "@prisma/client";
 
 import { authenticateApiKey } from "@/lib/apiKeyAuth";
-import { prisma } from "@/lib/prisma";
+import { queryGlobalEvents } from "@/lib/regionBroker";
 import { buildPaginatedResponse, resolvePagination, type PaginationQuery } from "@/lib/pagination";
 import { getRetentionWindowStart } from "@/lib/retention";
 import { recordQueryUsage } from "@/lib/billing";
 import { eventFilterSchema } from "@/schemas/events";
-import { queryCompanyEvents } from "@/lib/regionBroker";
 
-export const keyCompanyEventsRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/v1/key/company/events", async (request) => {
+/**
+ * Global multi-region event search endpoint.
+ * Uses GlobalEventIndex for metadata lookup, then fetches full events from regional DBs.
+ */
+export const keyCompanyGlobalRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/v1/key/company/events/global", async (request) => {
     const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
     const filters = eventFilterSchema.parse(request.query);
     const pagination = resolvePagination(request.query as PaginationQuery);
@@ -19,27 +22,13 @@ export const keyCompanyEventsRoutes: FastifyPluginAsync = async (app) => {
       company: ctx.company,
     });
 
-    const createdAtFilter: Prisma.DateTimeFilter = {
-      gte: filters.from ? new Date(Math.max(filters.from.getTime(), retention.start.getTime())) : retention.start,
-    };
+    // Apply retention window
+    const fromDate = filters.from
+      ? new Date(Math.max(filters.from.getTime(), retention.start.getTime()))
+      : retention.start;
+    const toDate = filters.to ?? new Date();
 
-    if (filters.to) {
-      createdAtFilter.lte = filters.to;
-    }
-
-    const where: Prisma.AuditEventWhereInput = {
-      companyId: ctx.company.id,
-      createdAt: createdAtFilter,
-      ...(filters.action ? { action: { equals: filters.action } } : {}),
-      ...(filters.category ? { category: { equals: filters.category } } : {}),
-      ...(filters.actorId ? { actorId: { equals: filters.actorId } } : {}),
-      ...(filters.actorEmail ? { actorEmail: { equals: filters.actorEmail } } : {}),
-      ...(filters.workspaceId ? { workspaceId: { equals: filters.workspaceId } } : {}),
-      ...(filters.projectId ? { projectId: { equals: filters.projectId } } : {}),
-    };
-
-    // Use region broker for querying
-    const { events, total } = await queryCompanyEvents(ctx.company.id, {
+    const { events, total } = await queryGlobalEvents(ctx.company.id, {
       page: pagination.page,
       limit: pagination.limit,
       action: filters.action,
@@ -48,8 +37,8 @@ export const keyCompanyEventsRoutes: FastifyPluginAsync = async (app) => {
       actorEmail: filters.actorEmail,
       workspaceId: filters.workspaceId,
       projectId: filters.projectId,
-      from: createdAtFilter.gte,
-      to: createdAtFilter.lte,
+      from: fromDate,
+      to: toDate,
     });
 
     await recordQueryUsage({

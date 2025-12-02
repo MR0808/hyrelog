@@ -392,10 +392,99 @@
 							]
 						},
 						"description": "Export archived events for a specific workspace. Set workspace_id environment variable first by calling 'List Workspaces'."
+					},
+					{
+						"name": "Global Event Search (Multi-Region)",
+						"request": {
+							"method": "GET",
+							"header": [
+								{
+									"key": "x-hyrelog-key",
+									"value": "{{company_key}}",
+									"type": "text"
+								}
+							],
+							"url": {
+								"raw": "{{base_url}}/v1/key/company/events/global?page=1&limit=20",
+								"host": ["{{base_url}}"],
+								"path": ["v1", "key", "company", "events", "global"],
+								"query": [
+									{
+										"key": "page",
+										"value": "1"
+									},
+									{
+										"key": "limit",
+										"value": "20"
+									},
+									{
+										"key": "action",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "category",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "actorId",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "actorEmail",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "workspaceId",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "projectId",
+										"value": "",
+										"disabled": true
+									},
+									{
+										"key": "from",
+										"value": "",
+										"disabled": true,
+										"description": "ISO 8601 date string"
+									},
+									{
+										"key": "to",
+										"value": "",
+										"disabled": true,
+										"description": "ISO 8601 date string"
+									}
+								]
+							},
+							"description": "Phase 3: Global multi-region event search. Uses GlobalEventIndex to search across all regions, then fetches full events from regional databases. Merges and sorts results."
+						}
+					},
+					{
+						"name": "Get Company Regions",
+						"request": {
+							"method": "GET",
+							"header": [
+								{
+									"key": "x-hyrelog-key",
+									"value": "{{company_key}}",
+									"type": "text"
+								}
+							],
+							"url": {
+								"raw": "{{base_url}}/v1/key/company/regions",
+								"host": ["{{base_url}}"],
+								"path": ["v1", "key", "company", "regions"]
+							},
+							"description": "Phase 3: Returns company's primary region, replica regions, health status, and cold storage configuration."
+						}
 					}
-				}
-			]
-		},
+				]
+			},
 		{
 			"name": "Workspace Key Endpoints",
 			"item": [
@@ -730,6 +819,31 @@
 							"path": ["v1", "key", "workspace", "events"]
 						},
 						"description": "Example of ingesting an event with old/new value tracking for field changes. Updated for template compliance: category changed from 'user' to 'auth' (template only allows 'auth' or 'billing'), includes projectId, actor fields, and metadata.source."
+					}
+				}
+			]
+		},
+		{
+			"name": "Internal Endpoints",
+			"item": [
+				{
+					"name": "Region Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-internal-token",
+								"value": "{{internal_token}}",
+								"type": "text",
+								"description": "Set in environment variables"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/internal/region-health",
+							"host": ["{{base_url}}"],
+							"path": ["internal", "region-health"]
+						},
+						"description": "Phase 3: Internal endpoint for region health monitoring. Requires x-internal-token header. Returns health status, latency, pending writes, and replication backlog for all regions."
 					}
 				}
 			]

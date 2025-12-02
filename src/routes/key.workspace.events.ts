@@ -13,6 +13,8 @@ import { getTraceId } from "@/lib/otel";
 import { getWorkspaceTemplate, validateEventWithTemplate } from "@/lib/templates";
 import { eventFilterSchema, ingestEventSchema } from "@/schemas/events";
 import { BillingLimitError } from "@/types/billing";
+import { ingestEventToRegion, queryWorkspaceEvents } from "@/lib/regionBroker";
+import { invalidateWorkspaceCache } from "@/lib/edgeCache";
 
 export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/key/workspace/events", async (request) => {
@@ -46,15 +48,18 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
       ...(filters.actorEmail ? { actorEmail: { equals: filters.actorEmail } } : {}),
     };
 
-    const [events, total] = await Promise.all([
-      prisma.auditEvent.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.auditEvent.count({ where }),
-    ]);
+    // Use region broker for querying
+    const { events, total } = await queryWorkspaceEvents(ctx.workspace.id, {
+      page: pagination.page,
+      limit: pagination.limit,
+      action: filters.action,
+      category: filters.category,
+      actorId: filters.actorId,
+      actorEmail: filters.actorEmail,
+      projectId: filters.projectId,
+      from: createdAtFilter.gte,
+      to: createdAtFilter.lte,
+    });
 
     await recordQueryUsage({
       companyId: ctx.company.id,
@@ -148,7 +153,10 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
 
-    const latestEvent = await prisma.auditEvent.findFirst({
+    // Get latest event for hash chain (from regional DB)
+    const { getPrismaForCompany } = await import("@/lib/regionClient");
+    const regionalPrisma = await getPrismaForCompany(ctx.company.id);
+    const latestEvent = await regionalPrisma.auditEvent.findFirst({
       where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: "desc" },
     });
@@ -173,32 +181,18 @@ export const keyWorkspaceEventsRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const traceId = getTraceId() ?? null;
-    const dataRegion = ctx.company.dataRegion ?? null;
 
-    const event = await prisma.auditEvent.create({
-      data: {
-        companyId: ctx.company.id,
-        workspaceId: ctx.workspace.id,
-        projectId: payload.projectId ?? null,
-        action: payload.action,
-        category: payload.category,
-        actorId: payload.actor?.id ?? null,
-        actorEmail: payload.actor?.email ?? null,
-        actorName: payload.actor?.name ?? null,
-        targetId: payload.target?.id ?? null,
-        targetType: payload.target?.type ?? null,
-        payload: payload.payload as Prisma.InputJsonValue,
-        metadata: (payload.metadata as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
-        changes: payload.changes
-          ? (payload.changes as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-        hash,
-        prevHash,
-        traceId,
-        dataRegion,
-        createdAt,
-      },
+    // Use region broker for ingestion
+    const event = await ingestEventToRegion(ctx.company.id, ctx.workspace.id, {
+      ...payload,
+      hash,
+      prevHash,
+      traceId,
+      createdAt,
     });
+
+    // Invalidate cache
+    await invalidateWorkspaceCache(ctx.workspace.id);
 
     await prisma.apiKey.update({
       where: { id: ctx.apiKey.id },

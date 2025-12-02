@@ -8,12 +8,15 @@ import { keyCompanyEventsRoutes } from "@/routes/key.company.events";
 import { keyCompanyUsageRoutes } from "@/routes/key.company.usage";
 import { keyCompanyExportsRoutes } from "@/routes/key.company.exports";
 import { keyCompanyArchiveRoutes } from "@/routes/key.company.archive";
+import { keyCompanyGlobalRoutes } from "@/routes/key.company.global";
+import { keyCompanyRegionsRoutes } from "@/routes/key.company.regions";
 import { keyWorkspaceRoutes } from "@/routes/key.workspace";
 import { keyWorkspaceEventsRoutes } from "@/routes/key.workspace.events";
 import { keyWorkspaceExportsRoutes } from "@/routes/key.workspace.exports";
 import { keyWorkspaceTailRoutes } from "@/routes/key.workspace.tail";
 import { internalMetricsRoutes } from "@/routes/internal.metrics";
 import { internalHealthRoutes } from "@/routes/internal.health";
+import { internalRegionHealthRoutes } from "@/routes/internal.region-health";
 import { prisma } from "@/lib/prisma";
 import { rateLimiter } from "@/lib/rateLimit";
 import { buildOpenApiDocument } from "@/openapi/openapi";
@@ -52,12 +55,15 @@ app.register(keyCompanyEventsRoutes);
 app.register(keyCompanyUsageRoutes);
 app.register(keyCompanyExportsRoutes);
 app.register(keyCompanyArchiveRoutes);
+app.register(keyCompanyGlobalRoutes);
+app.register(keyCompanyRegionsRoutes);
 app.register(keyWorkspaceRoutes);
 app.register(keyWorkspaceEventsRoutes);
 app.register(keyWorkspaceExportsRoutes);
 app.register(keyWorkspaceTailRoutes);
 app.register(internalMetricsRoutes);
 app.register(internalHealthRoutes);
+app.register(internalRegionHealthRoutes);
 
 app.addHook("onResponse", async (request, reply) => {
   if (!request.apiKeyContext) {
