@@ -1,147 +1,174 @@
-import type { FastifyPluginAsync } from "fastify";
-import { ApiKeyType } from "@prisma/client";
-import { z } from "zod";
+import type { FastifyPluginAsync } from 'fastify';
+import { ApiKeyType } from '@prisma/client';
+import { z } from 'zod';
 
-import { authenticateApiKey } from "@/lib/apiKeyAuth";
-import { prisma } from "@/lib/prisma";
-import { getExportLimit, buildExportQuery, streamEventsForExport } from "@/lib/exports";
+import { authenticateApiKey } from '@/lib/apiKeyAuth';
+import { prisma } from '@/lib/prisma';
+import {
+    getExportLimit,
+    buildExportQuery,
+    streamEventsForExport
+} from '@/lib/exports';
 
 const exportQuerySchema = z.object({
-  from: z.string().optional(),
-  to: z.string().optional(),
-  action: z.string().optional(),
-  category: z.string().optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+    action: z.string().optional(),
+    category: z.string().optional()
 });
 
 export const keyWorkspaceExportsRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/v1/key/workspace/export.json", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
-    if (!ctx.workspace) {
-      throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
-    }
-
-    const limit = await getExportLimit(ctx.company.id);
-
-    const queryParams = exportQuerySchema.parse(request.query);
-    const filters: {
-      from?: Date;
-      to?: Date;
-      action?: string;
-      category?: string;
-    } = {};
-
-    if (queryParams.from) {
-      filters.from = new Date(queryParams.from);
-    }
-    if (queryParams.to) {
-      filters.to = new Date(queryParams.to);
-    }
-    if (queryParams.action) {
-      filters.action = queryParams.action;
-    }
-    if (queryParams.category) {
-      filters.category = queryParams.category;
-    }
-
-    const where = buildExportQuery({
-      company: ctx.company,
-      workspace: ctx.workspace,
-      filters,
-    });
-
-    const total = await prisma.auditEvent.count({ where });
-    const exportCount = Math.min(total, limit);
-
-    reply.header("Content-Type", "application/json");
-    reply.header("Content-Disposition", `attachment; filename="hyrelog-export-${Date.now()}.json"`);
-
-    reply.raw.write("[\n");
-
-    let first = true;
-
-    for await (const batch of streamEventsForExport({ where, limit: exportCount })) {
-      for (const event of batch) {
-        if (!first) {
-          reply.raw.write(",\n");
+    app.get('/v1/key/workspace/export.json', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
+        if (!ctx.workspace) {
+            throw request.server.httpErrors.badRequest(
+                'Workspace key not linked to a workspace'
+            );
         }
-        first = false;
-        reply.raw.write(JSON.stringify(event));
-      }
-    }
 
-    reply.raw.write("\n]");
-    reply.raw.end();
-  });
+        const limit = await getExportLimit(ctx.company.id);
 
-  app.get("/v1/key/workspace/export.csv", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
-    if (!ctx.workspace) {
-      throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
-    }
+        const queryParams = exportQuerySchema.parse(request.query);
+        const filters: {
+            from?: Date;
+            to?: Date;
+            action?: string;
+            category?: string;
+        } = {};
 
-    const limit = await getExportLimit(ctx.company.id);
+        if (queryParams.from) {
+            filters.from = new Date(queryParams.from);
+        }
+        if (queryParams.to) {
+            filters.to = new Date(queryParams.to);
+        }
+        if (queryParams.action) {
+            filters.action = queryParams.action;
+        }
+        if (queryParams.category) {
+            filters.category = queryParams.category;
+        }
 
-    const queryParams = exportQuerySchema.parse(request.query);
-    const filters: {
-      from?: Date;
-      to?: Date;
-      action?: string;
-      category?: string;
-    } = {};
+        const where = buildExportQuery({
+            company: ctx.company,
+            workspace: ctx.workspace,
+            filters
+        });
 
-    if (queryParams.from) {
-      filters.from = new Date(queryParams.from);
-    }
-    if (queryParams.to) {
-      filters.to = new Date(queryParams.to);
-    }
-    if (queryParams.action) {
-      filters.action = queryParams.action;
-    }
-    if (queryParams.category) {
-      filters.category = queryParams.category;
-    }
+        const total = await prisma.auditEvent.count({ where });
+        const exportCount = Math.min(total, limit);
 
-    const where = buildExportQuery({
-      company: ctx.company,
-      workspace: ctx.workspace,
-      filters,
+        reply.header('Content-Type', 'application/json');
+        reply.header(
+            'Content-Disposition',
+            `attachment; filename="hyrelog-export-${Date.now()}.json"`
+        );
+
+        reply.raw.write('[\n');
+
+        let first = true;
+
+        for await (const batch of streamEventsForExport({
+            where,
+            limit: exportCount
+        })) {
+            for (const event of batch) {
+                if (!first) {
+                    reply.raw.write(',\n');
+                }
+                first = false;
+                reply.raw.write(JSON.stringify(event));
+            }
+        }
+
+        reply.raw.write('\n]');
+        reply.raw.end();
     });
 
-    const exportCount = Math.min(await prisma.auditEvent.count({ where }), limit);
+    app.get('/v1/key/workspace/export.csv', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
+        if (!ctx.workspace) {
+            throw request.server.httpErrors.badRequest(
+                'Workspace key not linked to a workspace'
+            );
+        }
 
-    reply.header("Content-Type", "text/csv");
-    reply.header("Content-Disposition", `attachment; filename="hyrelog-export-${Date.now()}.csv"`);
+        const workspace = ctx.workspace;
+        const limit = await getExportLimit(ctx.company.id);
 
-    reply.raw.write(
-      "id,companyId,workspaceId,projectId,action,category,actorId,actorEmail,actorName,targetId,targetType,createdAt,hash\n",
-    );
+        const queryParams = exportQuerySchema.parse(request.query);
+        const filters: {
+            from?: Date;
+            to?: Date;
+            action?: string;
+            category?: string;
+        } = {};
 
-    for await (const batch of streamEventsForExport({ where, limit: exportCount })) {
-      for (const event of batch) {
-        const row = [
-          event.id,
-          event.companyId,
-          event.workspaceId,
-          event.projectId ?? "",
-          event.action,
-          event.category,
-          event.actorId ?? "",
-          event.actorEmail ?? "",
-          event.actorName ?? "",
-          event.targetId ?? "",
-          event.targetType ?? "",
-          event.createdAt.toISOString(),
-          event.hash,
-        ]
-          .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-          .join(",");
+        if (queryParams.from) {
+            filters.from = new Date(queryParams.from);
+        }
+        if (queryParams.to) {
+            filters.to = new Date(queryParams.to);
+        }
+        if (queryParams.action) {
+            filters.action = queryParams.action;
+        }
+        if (queryParams.category) {
+            filters.category = queryParams.category;
+        }
 
-        reply.raw.write(`${row}\n`);
-      }
-    }
+        const where = buildExportQuery({
+            company: ctx.company,
+            workspace: workspace,
+            filters
+        });
 
-    reply.raw.end();
-  });
+        const exportCount = Math.min(
+            await prisma.auditEvent.count({ where }),
+            limit
+        );
+
+        reply.header('Content-Type', 'text/csv');
+        reply.header(
+            'Content-Disposition',
+            `attachment; filename="hyrelog-export-${Date.now()}.csv"`
+        );
+
+        reply.raw.write(
+            'id,companyId,workspaceId,projectId,action,category,actorId,actorEmail,actorName,targetId,targetType,createdAt,hash\n'
+        );
+
+        for await (const batch of streamEventsForExport({
+            where,
+            limit: exportCount
+        })) {
+            for (const event of batch) {
+                const row = [
+                    event.id,
+                    event.companyId,
+                    event.workspaceId,
+                    event.projectId ?? '',
+                    event.action,
+                    event.category,
+                    event.actorId ?? '',
+                    event.actorEmail ?? '',
+                    event.actorName ?? '',
+                    event.targetId ?? '',
+                    event.targetType ?? '',
+                    event.createdAt.toISOString(),
+                    event.hash
+                ]
+                    .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+                    .join(',');
+
+                reply.raw.write(`${row}\n`);
+            }
+        }
+
+        reply.raw.end();
+    });
 };
-

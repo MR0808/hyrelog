@@ -1,5 +1,5 @@
-import { AuditEvent } from "@prisma/client";
-import type { IngestEventInput } from "@/schemas/events";
+import { Prisma } from '@prisma/client';
+import type { IngestEventInput } from '@/schemas/events';
 /**
  * Ingests an event into the appropriate region.
  * Also writes metadata to GlobalEventIndex and queues replication if needed.
@@ -8,7 +8,7 @@ export declare function ingestEventToRegion(companyId: string, workspaceId: stri
     hash: string;
     prevHash: string | null;
     traceId?: string;
-}): Promise<AuditEvent>;
+}): Promise<Prisma.AuditEventGetPayload<{}>>;
 /**
  * Queries events from a workspace's region.
  */
@@ -23,7 +23,7 @@ export declare function queryWorkspaceEvents(workspaceId: string, filters: {
     from?: Date;
     to?: Date;
 }): Promise<{
-    events: AuditEvent[];
+    events: Prisma.AuditEventGetPayload<{}>[];
     total: number;
 }>;
 /**
@@ -41,7 +41,7 @@ export declare function queryCompanyEvents(companyId: string, filters: {
     from?: Date;
     to?: Date;
 }): Promise<{
-    events: AuditEvent[];
+    events: Prisma.AuditEventGetPayload<{}>[];
     total: number;
 }>;
 /**
@@ -60,7 +60,7 @@ export declare function queryGlobalEvents(companyId: string, filters: {
     from?: Date;
     to?: Date;
 }): Promise<{
-    events: AuditEvent[];
+    events: Prisma.AuditEventGetPayload<{}>[];
     total: number;
 }>;
 //# sourceMappingURL=regionBroker.d.ts.map

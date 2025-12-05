@@ -1,870 +1,904 @@
 {
-	"info": {
-		"_postman_id": "hyrelog-collection",
-		"name": "HyreLog Data API",
-		"description": "Complete API collection for HyreLog Audit Trail Data API",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Health Check",
-			"item": [
-				{
-					"name": "Health Check",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/healthz",
-							"host": ["{{base_url}}"],
-							"path": ["healthz"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Company Key Endpoints",
-			"item": [
-				{
-					"name": "Get Company Info",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company"]
-						}
-					}
-				},
-				{
-					"name": "List Workspaces",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/workspaces?page=1&limit=20",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "workspaces"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "limit",
-									"value": "20"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Get Workspace Details",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/workspaces/{{workspace_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "workspaces", "{{workspace_id}}"]
-						}
-					}
-				},
-				{
-					"name": "Get Company Events",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/events?page=1&limit=20",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "events"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "limit",
-									"value": "20"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "actorId",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "actorEmail",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "workspaceId",
-									"value": "{{workspace_id}}",
-									"disabled": true
-								},
-								{
-									"key": "projectId",
-									"value": "{{project_id}}",
-									"disabled": true
-								},
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Get Company Usage",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/usage",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "usage"]
-						}
-					}
-				},
-				{
-					"name": "GDPR Export",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/gdpr/export",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "gdpr", "export"]
-						}
-					}
-				},
-				{
-					"name": "Get Job Status",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/jobs/{{job_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "jobs", "{{job_id}}"]
-						},
-						"description": "Check the status of a GDPR export job. Use the jobId from the export response."
-					}
-				},
-				{
-					"name": "Export Company Events (JSON)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/export.json?from=&to=&action=&category=",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "export.json"],
-							"query": [
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								}
-							]
-						},
-						"description": "Export company events as JSON. Respects plan limits (Free: 10k, Starter: 50k, Growth: 250k, Scale: 1M, Enterprise: Unlimited)."
-					}
-				},
-				{
-					"name": "Export Company Events (CSV)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/export.csv?from=&to=&action=&category=",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "export.csv"],
-							"query": [
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								}
-							]
-						},
-						"description": "Export company events as CSV. Respects plan limits."
-					}
-				},
-				{
-					"name": "Export Archived Events (JSON) - All",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/export-archive.json",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "export-archive.json"]
-						},
-						"description": "Export all archived events from S3 (defaults to last year). Requires S3 archival add-on and company API key."
-					}
-				},
-				{
-					"name": "Export Archived Events (JSON) - Date Range",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/export-archive.json?from=2023-11-01&to=2023-11-30",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "export-archive.json"],
-							"query": [
-								{
-									"key": "from",
-									"value": "2023-11-01",
-									"description": "Start date (ISO 8601: YYYY-MM-DD). Defaults to 1 year ago."
-								},
-								{
-									"key": "to",
-									"value": "2023-11-30",
-									"description": "End date (ISO 8601: YYYY-MM-DD). Defaults to today."
-								},
-								{
-									"key": "workspaceId",
-									"value": "",
-									"disabled": true,
-									"description": "Optional: Filter by workspace ID"
-								}
-							]
-						},
-						"description": "Export archived events for a specific date range. Adjust dates based on when events were archived (typically 400+ days ago for seed data)."
-					}
-				},
-				{
-					"name": "Export Archived Events (JSON) - Specific Workspace",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{company_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/company/export-archive.json?workspaceId={{workspace_id}}&from=2023-11-01",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "company", "export-archive.json"],
-							"query": [
-								{
-									"key": "workspaceId",
-									"value": "{{workspace_id}}",
-									"description": "Workspace ID to filter by"
-								},
-								{
-									"key": "from",
-									"value": "2023-11-01",
-									"description": "Start date (ISO 8601: YYYY-MM-DD)"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "End date (ISO 8601: YYYY-MM-DD). Defaults to today."
-								}
-							]
-						},
-						"description": "Export archived events for a specific workspace. Set workspace_id environment variable first by calling 'List Workspaces'."
-					},
-					{
-						"name": "Global Event Search (Multi-Region)",
-						"request": {
-							"method": "GET",
-							"header": [
-								{
-									"key": "x-hyrelog-key",
-									"value": "{{company_key}}",
-									"type": "text"
-								}
-							],
-							"url": {
-								"raw": "{{base_url}}/v1/key/company/events/global?page=1&limit=20",
-								"host": ["{{base_url}}"],
-								"path": ["v1", "key", "company", "events", "global"],
-								"query": [
-									{
-										"key": "page",
-										"value": "1"
-									},
-									{
-										"key": "limit",
-										"value": "20"
-									},
-									{
-										"key": "action",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "category",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "actorId",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "actorEmail",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "workspaceId",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "projectId",
-										"value": "",
-										"disabled": true
-									},
-									{
-										"key": "from",
-										"value": "",
-										"disabled": true,
-										"description": "ISO 8601 date string"
-									},
-									{
-										"key": "to",
-										"value": "",
-										"disabled": true,
-										"description": "ISO 8601 date string"
-									}
-								]
-							},
-							"description": "Phase 3: Global multi-region event search. Uses GlobalEventIndex to search across all regions, then fetches full events from regional databases. Merges and sorts results."
-						}
-					},
-					{
-						"name": "Get Company Regions",
-						"request": {
-							"method": "GET",
-							"header": [
-								{
-									"key": "x-hyrelog-key",
-									"value": "{{company_key}}",
-									"type": "text"
-								}
-							],
-							"url": {
-								"raw": "{{base_url}}/v1/key/company/regions",
-								"host": ["{{base_url}}"],
-								"path": ["v1", "key", "company", "regions"]
-							},
-							"description": "Phase 3: Returns company's primary region, replica regions, health status, and cold storage configuration."
-						}
-					}
-				]
-			},
-			{
-				"name": "Workspace Key Endpoints",
-			"item": [
-				{
-					"name": "Get Workspace Info",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace"]
-						}
-					}
-				},
-				{
-					"name": "Get Workspace Events",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events?page=1&limit=20",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "limit",
-									"value": "20"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "actorId",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "actorEmail",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "projectId",
-									"value": "{{project_id}}",
-									"disabled": true
-								},
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Ingest Event (Minimal)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_2_key}}",
-								"type": "text",
-								"description": "Use workspace_2_key (Data Platform) - workspace_1_key has strict template"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"action\": \"user.login\",\n  \"category\": \"auth\",\n  \"payload\": {\n    \"ip\": \"192.168.1.1\",\n    \"userAgent\": \"Mozilla/5.0\"\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"]
-						},
-						"description": "Minimal event ingestion. Note: Use workspace_2_key (Data Platform) for this example. workspace_1_key (Core App) has a strict template that requires actor fields, metadata, and projectId."
-					}
-				},
-				{
-					"name": "Ingest Event (Template Compliant)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text",
-								"description": "Workspace with strict template (Core App) - requires: actor (id, email, name), metadata.source, projectId, category must be 'auth' or 'billing'"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"action\": \"user.login\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"ip\": \"192.168.1.1\",\n    \"userAgent\": \"Mozilla/5.0\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"]
-						},
-						"description": "Event ingestion that complies with strict template requirements. Template requires: actor (id, email, name), metadata.source, projectId, and category must be 'auth' or 'billing'. Use with workspace_1_key (Core App)."
-					}
-				},
-				{
-					"name": "Ingest Event (Full)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text",
-								"description": "Workspace with strict template (Core App)"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"action\": \"invoice.created\",\n  \"category\": \"billing\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"target\": {\n    \"id\": \"invoice-456\",\n    \"type\": \"invoice\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"amount\": 99.99,\n    \"currency\": \"USD\",\n    \"status\": \"pending\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"]
-						},
-						"description": "Full event example with all fields. Works with workspace_1_key (Core App) which has strict template requirements."
-					}
-				},
-				{
-					"name": "Ingest Event (With Project)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text",
-								"description": "Workspace with strict template (Core App) - requires actor.name and metadata.source"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"action\": \"project.created\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"projectName\": \"my-project\",\n    \"environment\": \"production\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"]
-						},
-						"description": "Event with project ID. Updated for template compliance: category must be 'auth' or 'billing' (changed from 'deployment'), includes actor.name and metadata.source."
-					}
-				},
-				{
-					"name": "Export Workspace Events (JSON)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/export.json?from=&to=&action=&category=",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "export.json"],
-							"query": [
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								}
-							]
-						},
-						"description": "Export workspace events as JSON. Respects plan limits."
-					}
-				},
-				{
-					"name": "Export Workspace Events (CSV)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/export.csv?from=&to=&action=&category=",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "export.csv"],
-							"query": [
-								{
-									"key": "from",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "to",
-									"value": "",
-									"disabled": true,
-									"description": "ISO 8601 date string"
-								},
-								{
-									"key": "action",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "category",
-									"value": "",
-									"disabled": true
-								}
-							]
-						},
-						"description": "Export workspace events as CSV. Respects plan limits."
-					}
-				},
-				{
-					"name": "Tail Events (SSE)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events/tail",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events", "tail"]
-						},
-						"description": "Stream events via Server-Sent Events (SSE). Requires Growth plan or above."
-					}
-				},
-				{
-					"name": "Ingest Event (With Changes)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "x-hyrelog-key",
-								"value": "{{workspace_1_key}}",
-								"type": "text",
-								"description": "Workspace with strict template (Core App)"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"action\": \"user.updated\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"admin-123\",\n    \"email\": \"admin@example.com\",\n    \"name\": \"Admin User\"\n  },\n  \"target\": {\n    \"id\": \"user-456\",\n    \"type\": \"user\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"changes\": [\n    {\n      \"field\": \"name\",\n      \"old\": \"John Doe\",\n      \"new\": \"Jane Doe\"\n    },\n    {\n      \"field\": \"email\",\n      \"old\": \"john@example.com\",\n      \"new\": \"jane@example.com\"\n    }\n  ],\n  \"payload\": {\n    \"userId\": \"user-456\"\n  },\n  \"metadata\": {\n    \"source\": \"admin-panel\"\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/key/workspace/events",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "key", "workspace", "events"]
-						},
-						"description": "Example of ingesting an event with old/new value tracking for field changes. Updated for template compliance: category changed from 'user' to 'auth' (template only allows 'auth' or 'billing'), includes projectId, actor fields, and metadata.source."
-					}
-				}
-			]
-		},
-		{
-			"name": "Internal Endpoints",
-			"item": [
-				{
-					"name": "Region Health Check",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "x-internal-token",
-								"value": "{{internal_token}}",
-								"type": "text",
-								"description": "Set in environment variables"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/internal/region-health",
-							"host": ["{{base_url}}"],
-							"path": ["internal", "region-health"]
-						},
-						"description": "Phase 3: Internal endpoint for region health monitoring. Requires x-internal-token header. Returns health status, latency, pending writes, and replication backlog for all regions."
-					}
-				}
-			]
-		},
-		{
-			"name": "OpenAPI",
-			"item": [
-				{
-					"name": "Get OpenAPI Schema",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/openapi.json",
-							"host": ["{{base_url}}"],
-							"path": ["openapi.json"]
-						}
-					}
-				}
-			]
-		}
-	]
+    "info": {
+        "_postman_id": "hyrelog-collection",
+        "name": "HyreLog Data API",
+        "description": "Complete API collection for HyreLog Audit Trail Data API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Health Check",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/healthz",
+                            "host": [],
+                            "path": ["healthz"]
+                        },
+                        "response": []
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Company Key Endpoints",
+            "item": [
+                {
+                    "name": "Get Company Info",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company",
+                            "host": [],
+                            "path": ["v1", "key", "company"]
+                        }
+                    }
+                },
+                {
+                    "name": "List Workspaces",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/workspaces?page=1&limit=20",
+                            "host": [],
+                            "path": ["v1", "key", "company", "workspaces"],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Workspace Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/workspaces/{{workspace_id}}",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "workspaces",
+                                "{{workspace_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Company Events",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/events?page=1&limit=20",
+                            "host": [],
+                            "path": ["v1", "key", "company", "events"],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorId",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorEmail",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "workspaceId",
+                                    "value": "{{workspace_id}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "projectId",
+                                    "value": "{{project_id}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Company Usage",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/usage",
+                            "host": [],
+                            "path": ["v1", "key", "company", "usage"]
+                        }
+                    }
+                },
+                {
+                    "name": "GDPR Export",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/gdpr/export",
+                            "host": [],
+                            "path": ["v1", "key", "company", "gdpr", "export"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Job Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/jobs/{{job_id}}",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "jobs",
+                                "{{job_id}}"
+                            ]
+                        },
+                        "description": "Check the status of a GDPR export job. Use the jobId from the export response."
+                    }
+                },
+                {
+                    "name": "Export Company Events (JSON)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/export.json?from=&to=&action=&category=",
+                            "host": [],
+                            "path": ["v1", "key", "company", "export.json"],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Export company events as JSON. Respects plan limits (Free: 10k, Starter: 50k, Growth: 250k, Scale: 1M, Enterprise: Unlimited)."
+                    }
+                },
+                {
+                    "name": "Export Company Events (CSV)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/export.csv?from=&to=&action=&category=",
+                            "host": [],
+                            "path": ["v1", "key", "company", "export.csv"],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Export company events as CSV. Respects plan limits."
+                    }
+                },
+                {
+                    "name": "Export Archived Events (JSON) - All",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/export-archive.json",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "export-archive.json"
+                            ]
+                        },
+                        "description": "Export all archived events from S3 (defaults to last year). Requires S3 archival add-on and company API key."
+                    }
+                },
+                {
+                    "name": "Export Archived Events (JSON) - Date Range",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/export-archive.json?from=2023-11-01&to=2023-11-30",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "export-archive.json"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "2023-11-01",
+                                    "description": "Start date (ISO 8601: YYYY-MM-DD). Defaults to 1 year ago."
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2023-11-30",
+                                    "description": "End date (ISO 8601: YYYY-MM-DD). Defaults to today."
+                                },
+                                {
+                                    "key": "workspaceId",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "Optional: Filter by workspace ID"
+                                }
+                            ]
+                        },
+                        "description": "Export archived events for a specific date range. Adjust dates based on when events were archived (typically 400+ days ago for seed data)."
+                    }
+                },
+                {
+                    "name": "Export Archived Events (JSON) - Specific Workspace",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/export-archive.json?workspaceId={{workspace_id}}&from=2023-11-01",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "export-archive.json"
+                            ],
+                            "query": [
+                                {
+                                    "key": "workspaceId",
+                                    "value": "{{workspace_id}}",
+                                    "description": "Workspace ID to filter by"
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2023-11-01",
+                                    "description": "Start date (ISO 8601: YYYY-MM-DD)"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "End date (ISO 8601: YYYY-MM-DD). Defaults to today."
+                                }
+                            ]
+                        },
+                        "description": "Export archived events for a specific workspace. Set workspace_id environment variable first by calling 'List Workspaces'."
+                    }
+                },
+                {
+                    "name": "Global Event Search (Multi-Region)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/events/global?page=1&limit=20",
+                            "host": [],
+                            "path": [
+                                "v1",
+                                "key",
+                                "company",
+                                "events",
+                                "global"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorId",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorEmail",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "workspaceId",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "projectId",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                }
+                            ]
+                        },
+                        "description": "Phase 3: Global multi-region event search. Uses GlobalEventIndex to search across all regions, then fetches full events from regional databases. Merges and sorts results."
+                    }
+                },
+                {
+                    "name": "Get Company Regions",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{company_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/company/regions",
+                            "host": [],
+                            "path": ["v1", "key", "company", "regions"]
+                        },
+                        "description": "Phase 3: Returns company's primary region, replica regions, health status, and cold storage configuration."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Workspace Key Endpoints",
+            "item": [
+                {
+                    "name": "Get Workspace Info",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace",
+                            "host": [],
+                            "path": ["v1", "key", "workspace"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Workspace Events",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events?page=1&limit=20",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorId",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "actorEmail",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "projectId",
+                                    "value": "{{project_id}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Ingest Event (Minimal)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_2_key}}",
+                                "type": "text",
+                                "description": "Use workspace_2_key (Data Platform) - workspace_1_key has strict template"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"action\": \"user.login\",\n  \"category\": \"auth\",\n  \"payload\": {\n    \"ip\": \"192.168.1.1\",\n    \"userAgent\": \"Mozilla/5.0\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"]
+                        },
+                        "description": "Minimal event ingestion. Note: Use workspace_2_key (Data Platform) for this example. workspace_1_key (Core App) has a strict template that requires actor fields, metadata, and projectId."
+                    }
+                },
+                {
+                    "name": "Ingest Event (Template Compliant)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text",
+                                "description": "Workspace with strict template (Core App) - requires: actor (id, email, name), metadata.source, projectId, category must be 'auth' or 'billing'"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"action\": \"user.login\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"ip\": \"192.168.1.1\",\n    \"userAgent\": \"Mozilla/5.0\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"]
+                        },
+                        "description": "Event ingestion that complies with strict template requirements. Template requires: actor (id, email, name), metadata.source, projectId, and category must be 'auth' or 'billing'. Use with workspace_1_key (Core App)."
+                    }
+                },
+                {
+                    "name": "Ingest Event (Full)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text",
+                                "description": "Workspace with strict template (Core App)"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"action\": \"invoice.created\",\n  \"category\": \"billing\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"target\": {\n    \"id\": \"invoice-456\",\n    \"type\": \"invoice\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"amount\": 99.99,\n    \"currency\": \"USD\",\n    \"status\": \"pending\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"]
+                        },
+                        "description": "Full event example with all fields. Works with workspace_1_key (Core App) which has strict template requirements."
+                    }
+                },
+                {
+                    "name": "Ingest Event (With Project)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text",
+                                "description": "Workspace with strict template (Core App) - requires actor.name and metadata.source"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"action\": \"project.created\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"user-123\",\n    \"email\": \"user@example.com\",\n    \"name\": \"John Doe\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"payload\": {\n    \"projectName\": \"my-project\",\n    \"environment\": \"production\"\n  },\n  \"metadata\": {\n    \"source\": \"api\",\n    \"version\": \"1.0\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"]
+                        },
+                        "description": "Event with project ID. Updated for template compliance: category must be 'auth' or 'billing' (changed from 'deployment'), includes actor.name and metadata.source."
+                    }
+                },
+                {
+                    "name": "Export Workspace Events (JSON)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/export.json?from=&to=&action=&category=",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "export.json"],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Export workspace events as JSON. Respects plan limits."
+                    }
+                },
+                {
+                    "name": "Export Workspace Events (CSV)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/export.csv?from=&to=&action=&category=",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "export.csv"],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "",
+                                    "disabled": true,
+                                    "description": "ISO 8601 date string"
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Export workspace events as CSV. Respects plan limits."
+                    }
+                },
+                {
+                    "name": "Tail Events (SSE)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events/tail",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events", "tail"]
+                        },
+                        "description": "Stream events via Server-Sent Events (SSE). Requires Growth plan or above."
+                    }
+                },
+                {
+                    "name": "Ingest Event (With Changes)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "x-hyrelog-key",
+                                "value": "{{workspace_1_key}}",
+                                "type": "text",
+                                "description": "Workspace with strict template (Core App)"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"action\": \"user.updated\",\n  \"category\": \"auth\",\n  \"actor\": {\n    \"id\": \"admin-123\",\n    \"email\": \"admin@example.com\",\n    \"name\": \"Admin User\"\n  },\n  \"target\": {\n    \"id\": \"user-456\",\n    \"type\": \"user\"\n  },\n  \"projectId\": \"{{project_id}}\",\n  \"changes\": [\n    {\n      \"field\": \"name\",\n      \"old\": \"John Doe\",\n      \"new\": \"Jane Doe\"\n    },\n    {\n      \"field\": \"email\",\n      \"old\": \"john@example.com\",\n      \"new\": \"jane@example.com\"\n    }\n  ],\n  \"payload\": {\n    \"userId\": \"user-456\"\n  },\n  \"metadata\": {\n    \"source\": \"admin-panel\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/v1/key/workspace/events",
+                            "host": [],
+                            "path": ["v1", "key", "workspace", "events"]
+                        },
+                        "description": "Example of ingesting an event with old/new value tracking for field changes. Updated for template compliance: category changed from 'user' to 'auth' (template only allows 'auth' or 'billing'), includes projectId, actor fields, and metadata.source."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Internal Endpoints",
+            "item": [
+                {
+                    "name": "Region Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "x-internal-token",
+                                "value": "{{internal_token}}",
+                                "type": "text",
+                                "description": "Set in environment variables"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/internal/region-health",
+                            "host": [],
+                            "path": ["internal", "region-health"]
+                        },
+                        "description": "Phase 3: Internal endpoint for region health monitoring. Requires x-internal-token header. Returns health status, latency, pending writes, and replication backlog for all regions."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "OpenAPI",
+            "item": [
+                {
+                    "name": "Get OpenAPI Schema",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/openapi.json",
+                            "host": [],
+                            "path": ["openapi.json"]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
 }
-

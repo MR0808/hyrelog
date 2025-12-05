@@ -1,88 +1,120 @@
-import { ApiKeyType, Prisma } from "@prisma/client";
-import { env } from "@/config/env";
-import { authenticateApiKey } from "@/lib/apiKeyAuth";
-import { incrementEventUsage, recordQueryUsage } from "@/lib/billing";
-import { prisma } from "@/lib/prisma";
-import { buildPaginatedResponse, resolvePagination } from "@/lib/pagination";
-import { getRetentionWindowStart } from "@/lib/retention";
-import { computeEventHash } from "@/lib/hashchain";
-import { createWebhookDeliveries } from "@/lib/webhooks";
-import { getTraceId } from "@/lib/otel";
-import { getWorkspaceTemplate, validateEventWithTemplate } from "@/lib/templates";
-import { eventFilterSchema, ingestEventSchema } from "@/schemas/events";
-import { BillingLimitError } from "@/types/billing";
-import { ingestEventToRegion, queryWorkspaceEvents } from "@/lib/regionBroker";
-import { invalidateWorkspaceCache } from "@/lib/edgeCache";
+import { ApiKeyType, Prisma } from '@prisma/client';
+import { env } from '@/config/env';
+import { authenticateApiKey } from '@/lib/apiKeyAuth';
+import { incrementEventUsage, recordQueryUsage } from '@/lib/billing';
+import { prisma } from '@/lib/prisma';
+import { buildPaginatedResponse, resolvePagination } from '@/lib/pagination';
+import { getRetentionWindowStart } from '@/lib/retention';
+import { computeEventHash } from '@/lib/hashchain';
+import { createWebhookDeliveries } from '@/lib/webhooks';
+import { getTraceId } from '@/lib/otel';
+import { getWorkspaceTemplate, validateEventWithTemplate } from '@/lib/templates';
+import { eventFilterSchema, ingestEventSchema } from '@/schemas/events';
+import { BillingLimitError } from '@/types/billing';
+import { ingestEventToRegion, queryWorkspaceEvents } from '@/lib/regionBroker';
+import { invalidateWorkspaceCache } from '@/lib/edgeCache';
 export const keyWorkspaceEventsRoutes = async (app) => {
-    app.get("/v1/key/workspace/events", async (request) => {
-        const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+    app.get('/v1/key/workspace/events', async (request) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
         if (!ctx.workspace) {
-            throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
+            throw request.server.httpErrors.badRequest('Workspace key not linked to a workspace');
         }
+        const workspace = ctx.workspace;
         const filters = eventFilterSchema.parse(request.query);
         const pagination = resolvePagination(request.query);
         const retention = getRetentionWindowStart({
             company: ctx.company,
-            workspace: ctx.workspace,
+            workspace: workspace
         });
+        const fromDate = filters.from
+            ? new Date(Math.max(filters.from.getTime(), retention.start.getTime()))
+            : retention.start;
         const createdAtFilter = {
-            gte: filters.from ? new Date(Math.max(filters.from.getTime(), retention.start.getTime())) : retention.start,
+            gte: fromDate
         };
         if (filters.to) {
             createdAtFilter.lte = filters.to;
         }
         const where = {
-            workspaceId: ctx.workspace.id,
+            workspaceId: workspace.id,
             createdAt: createdAtFilter,
-            ...(filters.projectId ? { projectId: { equals: filters.projectId } } : {}),
+            ...(filters.projectId
+                ? { projectId: { equals: filters.projectId } }
+                : {}),
             ...(filters.action ? { action: { equals: filters.action } } : {}),
-            ...(filters.category ? { category: { equals: filters.category } } : {}),
-            ...(filters.actorId ? { actorId: { equals: filters.actorId } } : {}),
-            ...(filters.actorEmail ? { actorEmail: { equals: filters.actorEmail } } : {}),
+            ...(filters.category
+                ? { category: { equals: filters.category } }
+                : {}),
+            ...(filters.actorId
+                ? { actorId: { equals: filters.actorId } }
+                : {}),
+            ...(filters.actorEmail
+                ? { actorEmail: { equals: filters.actorEmail } }
+                : {})
         };
         // Use region broker for querying
-        const { events, total } = await queryWorkspaceEvents(ctx.workspace.id, {
+        const queryFilters = {
             page: pagination.page,
             limit: pagination.limit,
-            action: filters.action,
-            category: filters.category,
-            actorId: filters.actorId,
-            actorEmail: filters.actorEmail,
-            projectId: filters.projectId,
-            from: createdAtFilter.gte,
-            to: createdAtFilter.lte,
-        });
+            from: fromDate
+        };
+        if (filters.action) {
+            queryFilters.action = filters.action;
+        }
+        if (filters.category) {
+            queryFilters.category = filters.category;
+        }
+        if (filters.actorId) {
+            queryFilters.actorId = filters.actorId;
+        }
+        if (filters.actorEmail) {
+            queryFilters.actorEmail = filters.actorEmail;
+        }
+        if (filters.projectId) {
+            queryFilters.projectId = filters.projectId;
+        }
+        if (filters.to) {
+            queryFilters.to = filters.to;
+        }
+        const { events, total } = await queryWorkspaceEvents(workspace.id, queryFilters);
         await recordQueryUsage({
             companyId: ctx.company.id,
-            workspaceId: ctx.workspace.id,
-            amount: events.length,
+            workspaceId: workspace.id,
+            amount: events.length
         });
         return buildPaginatedResponse(events, {
             page: pagination.page,
             limit: pagination.limit,
             total,
             retentionApplied: true,
-            retentionWindowStart: retention.start,
+            retentionWindowStart: retention.start
         });
     });
-    app.post("/v1/key/workspace/events", async (request, reply) => {
-        const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+    app.post('/v1/key/workspace/events', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
         if (!ctx.workspace) {
-            throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
+            throw request.server.httpErrors.badRequest('Workspace key not linked to a workspace');
         }
+        const workspace = ctx.workspace;
         const payload = ingestEventSchema.parse(request.body);
         // Validate against workspace template if assigned
-        const template = await getWorkspaceTemplate(ctx.workspace.id);
+        const template = await getWorkspaceTemplate(workspace.id);
         if (template) {
             const input = {
                 action: payload.action,
-                category: payload.category,
+                category: payload.category
             };
             if (payload.actor) {
                 input.actor = {
                     ...(payload.actor.id ? { id: payload.actor.id } : {}),
-                    ...(payload.actor.email ? { email: payload.actor.email } : {}),
-                    ...(payload.actor.name ? { name: payload.actor.name } : {}),
+                    ...(payload.actor.email
+                        ? { email: payload.actor.email }
+                        : {}),
+                    ...(payload.actor.name ? { name: payload.actor.name } : {})
                 };
             }
             if (payload.metadata) {
@@ -93,26 +125,26 @@ export const keyWorkspaceEventsRoutes = async (app) => {
             }
             const validation = validateEventWithTemplate(input, template);
             if (!validation.valid) {
-                throw request.server.httpErrors.badRequest(`Template validation failed: ${validation.errors.join(", ")}`);
+                throw request.server.httpErrors.badRequest(`Template validation failed: ${validation.errors.join(', ')}`);
             }
         }
         if (payload.projectId) {
             const projectExists = await prisma.project.findFirst({
                 where: {
                     id: payload.projectId,
-                    workspaceId: ctx.workspace.id,
+                    workspaceId: workspace.id
                 },
-                select: { id: true },
+                select: { id: true }
             });
             if (!projectExists) {
-                throw request.server.httpErrors.badRequest("Project does not belong to this workspace");
+                throw request.server.httpErrors.badRequest('Project does not belong to this workspace');
             }
         }
         try {
             await incrementEventUsage({
                 companyId: ctx.company.id,
-                workspaceId: ctx.workspace.id,
-                amount: 1,
+                workspaceId: workspace.id,
+                amount: 1
             });
         }
         catch (error) {
@@ -120,24 +152,24 @@ export const keyWorkspaceEventsRoutes = async (app) => {
                 const statusCode = Number(env.BILLING_HARD_CAP_RESPONSE);
                 reply.code(statusCode);
                 return {
-                    error: "billing_limit",
+                    error: 'billing_limit',
                     message: error.message,
-                    checkpoint: error.checkpoint,
+                    checkpoint: error.checkpoint
                 };
             }
             throw error;
         }
         // Get latest event for hash chain (from regional DB)
-        const { getPrismaForCompany } = await import("@/lib/regionClient");
+        const { getPrismaForCompany } = await import('@/lib/regionClient');
         const regionalPrisma = await getPrismaForCompany(ctx.company.id);
         const latestEvent = await regionalPrisma.auditEvent.findFirst({
-            where: { workspaceId: ctx.workspace.id },
-            orderBy: { createdAt: "desc" },
+            where: { workspaceId: workspace.id },
+            orderBy: { createdAt: 'desc' }
         });
         const createdAt = new Date();
         const prevHash = latestEvent?.hash ?? null;
         const hash = computeEventHash({
-            workspaceId: ctx.workspace.id,
+            workspaceId: workspace.id,
             companyId: ctx.company.id,
             projectId: payload.projectId ?? null,
             action: payload.action,
@@ -147,31 +179,31 @@ export const keyWorkspaceEventsRoutes = async (app) => {
             actorId: payload.actor?.id ?? null,
             actorEmail: payload.actor?.email ?? null,
             actorName: payload.actor?.name ?? null,
-            createdAt,
+            createdAt
         }, prevHash);
-        const traceId = getTraceId() ?? null;
+        const traceId = getTraceId() ?? undefined;
         // Use region broker for ingestion
-        const event = await ingestEventToRegion(ctx.company.id, ctx.workspace.id, {
+        const event = await ingestEventToRegion(ctx.company.id, workspace.id, {
             ...payload,
             hash,
             prevHash,
-            traceId,
-            createdAt,
+            ...(traceId !== undefined ? { traceId } : {}),
+            createdAt
         });
         // Invalidate cache
-        await invalidateWorkspaceCache(ctx.workspace.id);
+        await invalidateWorkspaceCache(workspace.id);
         await prisma.apiKey.update({
             where: { id: ctx.apiKey.id },
-            data: { lastUsedAt: createdAt },
+            data: { lastUsedAt: createdAt }
         });
         // Create webhook deliveries (non-blocking)
         void createWebhookDeliveries({
             companyId: ctx.company.id,
-            workspaceId: ctx.workspace.id,
-            eventId: event.id,
+            workspaceId: workspace.id,
+            eventId: event.id
         }).catch((error) => {
             // Log but don't fail the request
-            request.log.error({ error }, "Failed to create webhook deliveries");
+            request.log.error({ error }, 'Failed to create webhook deliveries');
         });
         reply.code(201);
         return event;

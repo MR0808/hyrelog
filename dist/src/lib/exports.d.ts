@@ -7,19 +7,7 @@ export declare const exportLimitSchema: z.ZodObject<{
     growth: z.ZodDefault<z.ZodNumber>;
     scale: z.ZodDefault<z.ZodNumber>;
     enterprise: z.ZodDefault<z.ZodNumber>;
-}, "strip", z.ZodTypeAny, {
-    free: number;
-    starter: number;
-    growth: number;
-    scale: number;
-    enterprise: number;
-}, {
-    free?: number | undefined;
-    starter?: number | undefined;
-    growth?: number | undefined;
-    scale?: number | undefined;
-    enterprise?: number | undefined;
-}>;
+}, z.core.$strip>;
 export type ExportLimits = z.infer<typeof exportLimitSchema>;
 export declare const EXPORT_LIMITS: ExportLimits;
 /**

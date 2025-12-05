@@ -3,207 +3,280 @@
  * Phase 4: Event Schema Registry
  */
 
-import type { FastifyPluginAsync } from "fastify";
-import { ApiKeyType } from "@prisma/client";
-import { z } from "zod";
-import { authenticateApiKey } from "@/lib/apiKeyAuth";
-import { prisma } from "@/lib/prisma";
-import Ajv from "ajv";
+import type { FastifyPluginAsync } from 'fastify';
+import { ApiKeyType, Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { authenticateApiKey } from '@/lib/apiKeyAuth';
+import { prisma } from '@/lib/prisma';
+import Ajv from 'ajv';
 
 const ajv = new Ajv({ allErrors: true });
 
 const createSchemaSchema = z.object({
-  eventType: z.string().min(1),
-  description: z.string().optional(),
-  jsonSchema: z.record(z.unknown()),
-  version: z.number().int().positive().optional().default(1),
+    eventType: z.string().min(1),
+    description: z.string().optional(),
+    jsonSchema: z.record(z.string(), z.unknown()),
+    version: z.number().int().positive().optional().default(1)
 });
 
 const updateSchemaSchema = z.object({
-  description: z.string().optional(),
-  jsonSchema: z.record(z.unknown()).optional(),
-  isActive: z.boolean().optional(),
+    description: z.string().optional(),
+    jsonSchema: z.record(z.string(), z.unknown()).optional(),
+    isActive: z.boolean().optional()
 });
 
 export const keyWorkspaceSchemasRoutes: FastifyPluginAsync = async (app) => {
-  /**
-   * Create a new event schema
-   * POST /v1/key/workspace/schemas
-   */
-  app.post("/v1/key/workspace/schemas", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+    /**
+     * Create a new event schema
+     * POST /v1/key/workspace/schemas
+     */
+    app.post('/v1/key/workspace/schemas', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
 
-    const body = createSchemaSchema.parse(request.body);
+        if (!ctx.workspace) {
+            throw reply.badRequest(
+                'Workspace context is required for this endpoint'
+            );
+        }
 
-    // Validate JSON Schema
-    try {
-      ajv.compile(body.jsonSchema);
-    } catch (error) {
-      throw reply.badRequest(`Invalid JSON Schema: ${error instanceof Error ? error.message : String(error)}`);
-    }
+        const workspace = ctx.workspace;
+        const body = createSchemaSchema.parse(request.body);
 
-    // Check if schema already exists for this eventType and version
-    const existing = await prisma.eventSchema.findUnique({
-      where: {
-        workspaceId_eventType_version: {
-          workspaceId: ctx.workspace.id,
-          eventType: body.eventType,
-          version: body.version,
-        },
-      },
+        // Validate JSON Schema
+        try {
+            ajv.compile(body.jsonSchema);
+        } catch (error) {
+            throw reply.badRequest(
+                `Invalid JSON Schema: ${
+                    error instanceof Error ? error.message : String(error)
+                }`
+            );
+        }
+
+        // Check if schema already exists for this eventType and version
+        const existing = await prisma.eventSchema.findUnique({
+            where: {
+                workspaceId_eventType_version: {
+                    workspaceId: workspace.id,
+                    eventType: body.eventType,
+                    version: body.version
+                }
+            }
+        });
+
+        if (existing) {
+            throw reply.conflict(
+                `Schema for eventType "${body.eventType}" version ${body.version} already exists`
+            );
+        }
+
+        // Deactivate previous versions if this is a new version
+        if (body.version > 1) {
+            await prisma.eventSchema.updateMany({
+                where: {
+                    workspaceId: workspace.id,
+                    eventType: body.eventType,
+                    isActive: true
+                },
+                data: {
+                    isActive: false
+                }
+            });
+        }
+
+        const schema = await prisma.eventSchema.create({
+            data: {
+                workspaceId: workspace.id,
+                eventType: body.eventType,
+                description: body.description ?? null,
+                jsonSchema: body.jsonSchema as Prisma.InputJsonValue,
+                version: body.version,
+                isActive: true
+            }
+        });
+
+        return schema;
     });
 
-    if (existing) {
-      throw reply.conflict(`Schema for eventType "${body.eventType}" version ${body.version} already exists`);
-    }
+    /**
+     * List all schemas for a workspace
+     * GET /v1/key/workspace/schemas
+     */
+    app.get('/v1/key/workspace/schemas', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
 
-    // Deactivate previous versions if this is a new version
-    if (body.version > 1) {
-      await prisma.eventSchema.updateMany({
-        where: {
-          workspaceId: ctx.workspace.id,
-          eventType: body.eventType,
-          isActive: true,
-        },
-        data: {
-          isActive: false,
-        },
-      });
-    }
+        if (!ctx.workspace) {
+            throw reply.badRequest(
+                'Workspace context is required for this endpoint'
+            );
+        }
 
-    const schema = await prisma.eventSchema.create({
-      data: {
-        workspaceId: ctx.workspace.id,
-        eventType: body.eventType,
-        description: body.description,
-        jsonSchema: body.jsonSchema,
-        version: body.version,
-        isActive: true,
-      },
+        const workspace = ctx.workspace;
+        const query = z
+            .object({
+                eventType: z.string().optional(),
+                isActive: z
+                    .string()
+                    .transform((val) => val === 'true')
+                    .optional()
+            })
+            .parse(request.query);
+
+        const schemas = await prisma.eventSchema.findMany({
+            where: {
+                workspaceId: workspace.id,
+                ...(query.eventType ? { eventType: query.eventType } : {}),
+                ...(query.isActive !== undefined
+                    ? { isActive: query.isActive }
+                    : {})
+            },
+            orderBy: [{ eventType: 'asc' }, { version: 'desc' }]
+        });
+
+        return { schemas };
     });
 
-    return schema;
-  });
+    /**
+     * Get a specific schema
+     * GET /v1/key/workspace/schemas/:schemaId
+     */
+    app.get('/v1/key/workspace/schemas/:schemaId', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
 
-  /**
-   * List all schemas for a workspace
-   * GET /v1/key/workspace/schemas
-   */
-  app.get("/v1/key/workspace/schemas", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+        if (!ctx.workspace) {
+            throw reply.badRequest(
+                'Workspace context is required for this endpoint'
+            );
+        }
 
-    const query = z
-      .object({
-        eventType: z.string().optional(),
-        isActive: z.string().transform((val) => val === "true").optional(),
-      })
-      .parse(request.query);
+        const workspace = ctx.workspace;
+        const params = z.object({ schemaId: z.string() }).parse(request.params);
 
-    const schemas = await prisma.eventSchema.findMany({
-      where: {
-        workspaceId: ctx.workspace.id,
-        ...(query.eventType ? { eventType: query.eventType } : {}),
-        ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
-      },
-      orderBy: [
-        { eventType: "asc" },
-        { version: "desc" },
-      ],
+        const schema = await prisma.eventSchema.findFirst({
+            where: {
+                id: params.schemaId,
+                workspaceId: workspace.id
+            }
+        });
+
+        if (!schema) {
+            throw reply.notFound('Schema not found');
+        }
+
+        return schema;
     });
 
-    return { schemas };
-  });
+    /**
+     * Update a schema
+     * PUT /v1/key/workspace/schemas/:schemaId
+     */
+    app.put('/v1/key/workspace/schemas/:schemaId', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
 
-  /**
-   * Get a specific schema
-   * GET /v1/key/workspace/schemas/:schemaId
-   */
-  app.get("/v1/key/workspace/schemas/:schemaId", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+        if (!ctx.workspace) {
+            throw reply.badRequest(
+                'Workspace context is required for this endpoint'
+            );
+        }
 
-    const params = z.object({ schemaId: z.string() }).parse(request.params);
+        const workspace = ctx.workspace;
+        const params = z.object({ schemaId: z.string() }).parse(request.params);
+        const body = updateSchemaSchema.parse(request.body);
 
-    const schema = await prisma.eventSchema.findFirst({
-      where: {
-        id: params.schemaId,
-        workspaceId: ctx.workspace.id,
-      },
+        const existing = await prisma.eventSchema.findFirst({
+            where: {
+                id: params.schemaId,
+                workspaceId: workspace.id
+            }
+        });
+
+        if (!existing) {
+            throw reply.notFound('Schema not found');
+        }
+
+        // Validate JSON Schema if provided
+        if (body.jsonSchema) {
+            try {
+                ajv.compile(body.jsonSchema);
+            } catch (error) {
+                throw reply.badRequest(
+                    `Invalid JSON Schema: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                );
+            }
+        }
+
+        const updateData: {
+            description?: string | null;
+            jsonSchema?: Prisma.InputJsonValue;
+            isActive?: boolean;
+        } = {};
+
+        if (body.description !== undefined) {
+            updateData.description = body.description ?? null;
+        }
+        if (body.jsonSchema !== undefined) {
+            updateData.jsonSchema = body.jsonSchema as Prisma.InputJsonValue;
+        }
+        if (body.isActive !== undefined) {
+            updateData.isActive = body.isActive;
+        }
+
+        const schema = await prisma.eventSchema.update({
+            where: { id: params.schemaId },
+            data: updateData
+        });
+
+        return schema;
     });
 
-    if (!schema) {
-      throw reply.notFound("Schema not found");
-    }
+    /**
+     * Delete a schema
+     * DELETE /v1/key/workspace/schemas/:schemaId
+     */
+    app.delete(
+        '/v1/key/workspace/schemas/:schemaId',
+        async (request, reply) => {
+            const ctx = await authenticateApiKey(request, {
+                allow: [ApiKeyType.WORKSPACE]
+            });
 
-    return schema;
-  });
+            if (!ctx.workspace) {
+                throw reply.badRequest(
+                    'Workspace context is required for this endpoint'
+                );
+            }
 
-  /**
-   * Update a schema
-   * PUT /v1/key/workspace/schemas/:schemaId
-   */
-  app.put("/v1/key/workspace/schemas/:schemaId", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+            const workspace = ctx.workspace;
+            const params = z
+                .object({ schemaId: z.string() })
+                .parse(request.params);
 
-    const params = z.object({ schemaId: z.string() }).parse(request.params);
-    const body = updateSchemaSchema.parse(request.body);
+            const existing = await prisma.eventSchema.findFirst({
+                where: {
+                    id: params.schemaId,
+                    workspaceId: workspace.id
+                }
+            });
 
-    const existing = await prisma.eventSchema.findFirst({
-      where: {
-        id: params.schemaId,
-        workspaceId: ctx.workspace.id,
-      },
-    });
+            if (!existing) {
+                throw reply.notFound('Schema not found');
+            }
 
-    if (!existing) {
-      throw reply.notFound("Schema not found");
-    }
+            await prisma.eventSchema.delete({
+                where: { id: params.schemaId }
+            });
 
-    // Validate JSON Schema if provided
-    if (body.jsonSchema) {
-      try {
-        ajv.compile(body.jsonSchema);
-      } catch (error) {
-        throw reply.badRequest(`Invalid JSON Schema: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    const schema = await prisma.eventSchema.update({
-      where: { id: params.schemaId },
-      data: {
-        ...(body.description !== undefined ? { description: body.description } : {}),
-        ...(body.jsonSchema ? { jsonSchema: body.jsonSchema } : {}),
-        ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
-      },
-    });
-
-    return schema;
-  });
-
-  /**
-   * Delete a schema
-   * DELETE /v1/key/workspace/schemas/:schemaId
-   */
-  app.delete("/v1/key/workspace/schemas/:schemaId", async (request, reply) => {
-    const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
-
-    const params = z.object({ schemaId: z.string() }).parse(request.params);
-
-    const existing = await prisma.eventSchema.findFirst({
-      where: {
-        id: params.schemaId,
-        workspaceId: ctx.workspace.id,
-      },
-    });
-
-    if (!existing) {
-      throw reply.notFound("Schema not found");
-    }
-
-    await prisma.eventSchema.delete({
-      where: { id: params.schemaId },
-    });
-
-    return { success: true };
-  });
+            return { success: true };
+        }
+    );
 };
-

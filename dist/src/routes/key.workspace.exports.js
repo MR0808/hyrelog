@@ -1,19 +1,21 @@
-import { ApiKeyType } from "@prisma/client";
-import { z } from "zod";
-import { authenticateApiKey } from "@/lib/apiKeyAuth";
-import { prisma } from "@/lib/prisma";
-import { getExportLimit, buildExportQuery, streamEventsForExport } from "@/lib/exports";
+import { ApiKeyType } from '@prisma/client';
+import { z } from 'zod';
+import { authenticateApiKey } from '@/lib/apiKeyAuth';
+import { prisma } from '@/lib/prisma';
+import { getExportLimit, buildExportQuery, streamEventsForExport } from '@/lib/exports';
 const exportQuerySchema = z.object({
     from: z.string().optional(),
     to: z.string().optional(),
     action: z.string().optional(),
-    category: z.string().optional(),
+    category: z.string().optional()
 });
 export const keyWorkspaceExportsRoutes = async (app) => {
-    app.get("/v1/key/workspace/export.json", async (request, reply) => {
-        const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+    app.get('/v1/key/workspace/export.json', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
         if (!ctx.workspace) {
-            throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
+            throw request.server.httpErrors.badRequest('Workspace key not linked to a workspace');
         }
         const limit = await getExportLimit(ctx.company.id);
         const queryParams = exportQuerySchema.parse(request.query);
@@ -33,31 +35,37 @@ export const keyWorkspaceExportsRoutes = async (app) => {
         const where = buildExportQuery({
             company: ctx.company,
             workspace: ctx.workspace,
-            filters,
+            filters
         });
         const total = await prisma.auditEvent.count({ where });
         const exportCount = Math.min(total, limit);
-        reply.header("Content-Type", "application/json");
-        reply.header("Content-Disposition", `attachment; filename="hyrelog-export-${Date.now()}.json"`);
-        reply.raw.write("[\n");
+        reply.header('Content-Type', 'application/json');
+        reply.header('Content-Disposition', `attachment; filename="hyrelog-export-${Date.now()}.json"`);
+        reply.raw.write('[\n');
         let first = true;
-        for await (const batch of streamEventsForExport({ where, limit: exportCount })) {
+        for await (const batch of streamEventsForExport({
+            where,
+            limit: exportCount
+        })) {
             for (const event of batch) {
                 if (!first) {
-                    reply.raw.write(",\n");
+                    reply.raw.write(',\n');
                 }
                 first = false;
                 reply.raw.write(JSON.stringify(event));
             }
         }
-        reply.raw.write("\n]");
+        reply.raw.write('\n]');
         reply.raw.end();
     });
-    app.get("/v1/key/workspace/export.csv", async (request, reply) => {
-        const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.WORKSPACE] });
+    app.get('/v1/key/workspace/export.csv', async (request, reply) => {
+        const ctx = await authenticateApiKey(request, {
+            allow: [ApiKeyType.WORKSPACE]
+        });
         if (!ctx.workspace) {
-            throw request.server.httpErrors.badRequest("Workspace key not linked to a workspace");
+            throw request.server.httpErrors.badRequest('Workspace key not linked to a workspace');
         }
+        const workspace = ctx.workspace;
         const limit = await getExportLimit(ctx.company.id);
         const queryParams = exportQuerySchema.parse(request.query);
         const filters = {};
@@ -75,32 +83,35 @@ export const keyWorkspaceExportsRoutes = async (app) => {
         }
         const where = buildExportQuery({
             company: ctx.company,
-            workspace: ctx.workspace,
-            filters,
+            workspace: workspace,
+            filters
         });
         const exportCount = Math.min(await prisma.auditEvent.count({ where }), limit);
-        reply.header("Content-Type", "text/csv");
-        reply.header("Content-Disposition", `attachment; filename="hyrelog-export-${Date.now()}.csv"`);
-        reply.raw.write("id,companyId,workspaceId,projectId,action,category,actorId,actorEmail,actorName,targetId,targetType,createdAt,hash\n");
-        for await (const batch of streamEventsForExport({ where, limit: exportCount })) {
+        reply.header('Content-Type', 'text/csv');
+        reply.header('Content-Disposition', `attachment; filename="hyrelog-export-${Date.now()}.csv"`);
+        reply.raw.write('id,companyId,workspaceId,projectId,action,category,actorId,actorEmail,actorName,targetId,targetType,createdAt,hash\n');
+        for await (const batch of streamEventsForExport({
+            where,
+            limit: exportCount
+        })) {
             for (const event of batch) {
                 const row = [
                     event.id,
                     event.companyId,
                     event.workspaceId,
-                    event.projectId ?? "",
+                    event.projectId ?? '',
                     event.action,
                     event.category,
-                    event.actorId ?? "",
-                    event.actorEmail ?? "",
-                    event.actorName ?? "",
-                    event.targetId ?? "",
-                    event.targetType ?? "",
+                    event.actorId ?? '',
+                    event.actorEmail ?? '',
+                    event.actorName ?? '',
+                    event.targetId ?? '',
+                    event.targetType ?? '',
                     event.createdAt.toISOString(),
-                    event.hash,
+                    event.hash
                 ]
                     .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-                    .join(",");
+                    .join(',');
                 reply.raw.write(`${row}\n`);
             }
         }

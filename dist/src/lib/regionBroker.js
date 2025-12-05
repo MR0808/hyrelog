@@ -1,66 +1,96 @@
-import { Region, AuditEvent, DataRegion } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
-import { getPrismaForCompany, getPrismaForRegion, getRegionForCompany, getAllRegions, } from "@/lib/regionClient";
+import { Region, DataRegion, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { getPrismaForCompany, getPrismaForRegion, getRegionForCompany, getAllRegions } from '@/lib/regionClient';
+import { createAsyncSpan, setSpanAttributes, addSpanEvent, recordSpanException } from '@/lib/otel';
 /**
  * Ingests an event into the appropriate region.
  * Also writes metadata to GlobalEventIndex and queues replication if needed.
  */
 export async function ingestEventToRegion(companyId, workspaceId, eventData) {
-    // Get company's region
-    const region = await getRegionForCompany(companyId);
-    const regionalPrisma = await getPrismaForRegion(region);
-    // Get company to check replication settings
-    const company = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { replicateTo: true },
+    return createAsyncSpan('hyrelog.ingest_event', async (span) => {
+        setSpanAttributes({
+            'hyrelog.company_id': companyId,
+            'hyrelog.workspace_id': workspaceId,
+            'hyrelog.event.action': eventData.action,
+            'hyrelog.event.category': eventData.category,
+            'hyrelog.event.hash': eventData.hash
+        });
+        if (eventData.traceId) {
+            span.setAttribute('hyrelog.trace_id', eventData.traceId);
+        }
+        try {
+            // Get company's region
+            const region = await getRegionForCompany(companyId);
+            span.setAttribute('hyrelog.region', region);
+            const regionalPrisma = await getPrismaForRegion(region);
+            // Get company to check replication settings
+            const company = await prisma.company.findUnique({
+                where: { id: companyId },
+                select: { replicateTo: true }
+            });
+            if (!company) {
+                throw new Error(`Company not found: ${companyId}`);
+            }
+            // Write event to regional database
+            addSpanEvent('hyrelog.event.write_start');
+            const event = await regionalPrisma.auditEvent.create({
+                data: {
+                    companyId,
+                    workspaceId,
+                    projectId: eventData.projectId ?? null,
+                    action: eventData.action,
+                    category: eventData.category,
+                    actorId: eventData.actor?.id ?? null,
+                    actorEmail: eventData.actor?.email ?? null,
+                    actorName: eventData.actor?.name ?? null,
+                    targetId: eventData.target?.id ?? null,
+                    targetType: eventData.target?.type ?? null,
+                    payload: eventData.payload,
+                    metadata: eventData.metadata,
+                    changes: eventData.changes,
+                    hash: eventData.hash,
+                    prevHash: eventData.prevHash,
+                    traceId: eventData.traceId ?? null,
+                    dataRegion: region,
+                    createdAt: eventData
+                        .createdAt ?? new Date()
+                }
+            });
+            addSpanEvent('hyrelog.event.write_complete', {
+                'hyrelog.event.id': event.id
+            });
+            // Write metadata to GlobalEventIndex (in primary DB)
+            await prisma.globalEventIndex.create({
+                data: {
+                    id: event.id,
+                    companyId,
+                    workspaceId,
+                    projectId: eventData.projectId ?? null,
+                    dataRegion: region,
+                    occurredAt: event.createdAt,
+                    action: eventData.action,
+                    category: eventData.category,
+                    actorId: eventData.actor?.id ?? null,
+                    actorEmail: eventData.actor?.email ?? null
+                }
+            });
+            // Queue replication jobs if company has replicateTo configured
+            if (company.replicateTo.length > 0) {
+                addSpanEvent('hyrelog.replication.queued', {
+                    'hyrelog.replication.regions': company.replicateTo.join(',')
+                });
+                // TODO: Create replication job entries
+            }
+            span.setAttribute('hyrelog.event.id', event.id);
+            return event;
+        }
+        catch (error) {
+            recordSpanException(error instanceof Error ? error : new Error(String(error)), {
+                'hyrelog.error.type': 'ingestion_failed'
+            });
+            throw error;
+        }
     });
-    if (!company) {
-        throw new Error(`Company not found: ${companyId}`);
-    }
-    // Write event to regional database
-    const event = await regionalPrisma.auditEvent.create({
-        data: {
-            companyId,
-            workspaceId,
-            projectId: eventData.projectId ?? null,
-            action: eventData.action,
-            category: eventData.category,
-            actorId: eventData.actor?.id ?? null,
-            actorEmail: eventData.actor?.email ?? null,
-            actorName: eventData.actor?.name ?? null,
-            targetId: eventData.target?.id ?? null,
-            targetType: eventData.target?.type ?? null,
-            payload: eventData.payload,
-            metadata: eventData.metadata,
-            changes: eventData.changes,
-            hash: eventData.hash,
-            prevHash: eventData.prevHash,
-            traceId: eventData.traceId,
-            dataRegion: region, // Region enum matches DataRegion enum
-            createdAt: eventData.createdAt ?? new Date(),
-        },
-    });
-    // Write metadata to GlobalEventIndex (in primary DB)
-    await prisma.globalEventIndex.create({
-        data: {
-            id: event.id,
-            companyId,
-            workspaceId,
-            projectId: eventData.projectId ?? null,
-            dataRegion: region,
-            occurredAt: event.createdAt,
-            action: eventData.action,
-            category: eventData.category,
-            actorId: eventData.actor?.id ?? null,
-            actorEmail: eventData.actor?.email ?? null,
-        },
-    });
-    // Queue replication jobs if company has replicateTo configured
-    if (company.replicateTo.length > 0) {
-        // TODO: Create replication job entries
-        // For now, we'll handle this in the replication worker
-    }
-    return event;
 }
 /**
  * Queries events from a workspace's region.
@@ -69,7 +99,7 @@ export async function queryWorkspaceEvents(workspaceId, filters) {
     // Get workspace to find company
     const workspace = await prisma.workspace.findUnique({
         where: { id: workspaceId },
-        select: { companyId: true },
+        select: { companyId: true }
     });
     if (!workspace) {
         throw new Error(`Workspace not found: ${workspaceId}`);
@@ -79,7 +109,7 @@ export async function queryWorkspaceEvents(workspaceId, filters) {
     // Build where clause
     const where = {
         workspaceId,
-        archived: false,
+        archived: false
     };
     if (filters.action) {
         where.action = filters.action;
@@ -111,11 +141,11 @@ export async function queryWorkspaceEvents(workspaceId, filters) {
     const [events, total] = await Promise.all([
         regionalPrisma.auditEvent.findMany({
             where,
-            orderBy: { createdAt: "desc" },
+            orderBy: { createdAt: 'desc' },
             skip,
-            take: limit,
+            take: limit
         }),
-        regionalPrisma.auditEvent.count({ where }),
+        regionalPrisma.auditEvent.count({ where })
     ]);
     return { events, total };
 }
@@ -128,7 +158,7 @@ export async function queryCompanyEvents(companyId, filters) {
     // Build where clause
     const where = {
         companyId,
-        archived: false,
+        archived: false
     };
     if (filters.action) {
         where.action = filters.action;
@@ -163,11 +193,11 @@ export async function queryCompanyEvents(companyId, filters) {
     const [events, total] = await Promise.all([
         regionalPrisma.auditEvent.findMany({
             where,
-            orderBy: { createdAt: "desc" },
+            orderBy: { createdAt: 'desc' },
             skip,
-            take: limit,
+            take: limit
         }),
-        regionalPrisma.auditEvent.count({ where }),
+        regionalPrisma.auditEvent.count({ where })
     ]);
     return { events, total };
 }
@@ -178,7 +208,7 @@ export async function queryCompanyEvents(companyId, filters) {
 export async function queryGlobalEvents(companyId, filters) {
     // Query GlobalEventIndex for matching event IDs
     const indexWhere = {
-        companyId,
+        companyId
     };
     if (filters.action) {
         indexWhere.action = filters.action;
@@ -213,13 +243,13 @@ export async function queryGlobalEvents(companyId, filters) {
     // Get metadata from index
     const indexEntries = await prisma.globalEventIndex.findMany({
         where: indexWhere,
-        orderBy: { occurredAt: "desc" },
+        orderBy: { occurredAt: 'desc' },
         skip,
         take: limit,
         select: {
             id: true,
-            dataRegion: true,
-        },
+            dataRegion: true
+        }
     });
     const total = await prisma.globalEventIndex.count({ where: indexWhere });
     // Group by region
@@ -237,8 +267,8 @@ export async function queryGlobalEvents(companyId, filters) {
         const events = await regionalPrisma.auditEvent.findMany({
             where: {
                 id: { in: eventIds },
-                archived: false,
-            },
+                archived: false
+            }
         });
         allEvents.push(...events);
     }

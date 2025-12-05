@@ -69,25 +69,24 @@ export const authenticateApiKey = async (
       },
     });
 
-  if (!apiKey) {
-    throw request.server.httpErrors.unauthorized("Invalid API key");
-  }
+    if (!apiKey) {
+      throw request.server.httpErrors.unauthorized("Invalid API key");
+    }
 
-  if (options.allow && !options.allow.includes(apiKey.type)) {
-    throw request.server.httpErrors.forbidden("API key is not permitted for this endpoint");
-  }
+    if (options.allow && !options.allow.includes(apiKey.type)) {
+      throw request.server.httpErrors.forbidden("API key is not permitted for this endpoint");
+    }
 
-  const context: ApiKeyContext = {
-    apiKey,
-    company: apiKey.company,
-    workspace: apiKey.workspace,
-  };
+    const context: ApiKeyContext = {
+      apiKey,
+      company: apiKey.company,
+      workspace: apiKey.workspace,
+    };
 
-  // Check for custom per-key rate limit (could be stored in API key metadata)
-  // For now, use default limit
-  enforceRateLimit(request, `key:${apiKey.id}`, env.RATE_LIMIT_PER_KEY, reply);
-  request.apiKeyContext = context;
-  return context;
+    // Note: Rate limiting is handled at the route level, not here
+    request.apiKeyContext = context;
+    return context;
+  });
 };
 
 const enforceRateLimit = (

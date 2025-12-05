@@ -1,0 +1,1 @@
+{"version":3,"file":"lambda-edge.d.ts","sourceRoot":"","sources":["../../../src/edge/lambda-edge.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAEH,OAAO,KAAK,EACR,sBAAsB,EACtB,uBAAuB,EAC1B,MAAM,YAAY,CAAC;AAEpB,eAAO,MAAM,OAAO,GAChB,OAAO,sBAAsB,KAC9B,OAAO,CAAC,uBAAuB,CAsFjC,CAAC"}

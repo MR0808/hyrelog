@@ -1,6 +1,6 @@
-import { Region, PendingWrite } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
-import { getPrismaForRegion, getAllRegions } from "@/lib/regionClient";
+import { Region, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { getPrismaForRegion, getAllRegions } from '@/lib/regionClient';
 /**
  * Checks if a region is healthy.
  */
@@ -30,10 +30,10 @@ export async function processPendingWrites(region) {
     const regionalPrisma = await getPrismaForRegion(region);
     const pendingWrites = await prisma.pendingWrite.findMany({
         where: {
-            region,
+            region
         },
-        orderBy: { createdAt: "asc" },
-        take: 100, // Process in batches
+        orderBy: { createdAt: 'asc' },
+        take: 100 // Process in batches
     });
     let processed = 0;
     for (const write of pendingWrites) {
@@ -60,12 +60,12 @@ export async function processPendingWrites(region) {
                     prevHash: eventData.prevHash ?? null,
                     traceId: eventData.traceId ?? null,
                     dataRegion: eventData.dataRegion,
-                    createdAt: eventData.createdAt,
-                },
+                    createdAt: eventData.createdAt
+                }
             });
             // Delete the pending write
             await prisma.pendingWrite.delete({
-                where: { id: write.id },
+                where: { id: write.id }
             });
             processed++;
         }
@@ -85,8 +85,8 @@ export async function queuePendingWrite(companyId, region, eventData) {
         data: {
             companyId,
             region,
-            eventData: eventData,
-        },
+            eventData: eventData
+        }
     });
 }
 /**
@@ -101,7 +101,7 @@ export async function checkAllRegionsHealth() {
         const latencyMs = Date.now() - start;
         results[region] = {
             healthy,
-            latencyMs: healthy ? latencyMs : undefined,
+            ...(healthy ? { latencyMs } : {})
         };
     }
     return results;

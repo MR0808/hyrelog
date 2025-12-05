@@ -1,6 +1,7 @@
-import crypto from 'node:crypto';
+import * as crypto from 'node:crypto';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import * as argon2 from 'argon2';
 import {
     ApiKeyType,
     BillingCycle,
@@ -11,7 +12,8 @@ import {
     WebhookDeliveryStatus,
     ThresholdType,
     GdprRequestType,
-    GdprRequestStatus
+    GdprRequestStatus,
+    InternalUserRole
 } from '@prisma/client';
 
 import { env } from '@/config/env';
@@ -19,12 +21,53 @@ import { hashApiKey } from '@/lib/apiKeyAuth';
 import { computeEventHash } from '@/lib/hashchain';
 
 const pool = new Pool({ connectionString: env.DATABASE_URL });
+// Handle pool errors to prevent unhandled error events
+pool.on('error', (err) => {
+    // Only log if not already shutting down
+    if (!pool.ending) {
+        console.error('⚠️  Pool error (non-fatal):', err.message);
+    }
+});
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const randomKey = () => `hlk_${crypto.randomBytes(24).toString('hex')}`;
 const keyPrefix = (raw: string) => raw.slice(0, 12);
 const randomSecret = () => crypto.randomBytes(32).toString('hex');
+
+// Generate a random password (12 characters, alphanumeric + special chars)
+const generatePassword = (): string => {
+    const chars =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+};
+
+// Hash password using Argon2
+const hashPassword = async (password: string): Promise<string> => {
+    return argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 65536, // 64 MB
+        timeCost: 3, // 3 iterations
+        parallelism: 4 // 4 threads
+    });
+};
+
+// Store user credentials for output
+interface UserCredential {
+    email: string;
+    password: string;
+    name: string;
+    role: string;
+    company?: string;
+    workspace?: string;
+    type: 'customer' | 'internal';
+}
+
+const userCredentials: UserCredential[] = [];
 
 const now = new Date();
 const monthFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -63,7 +106,12 @@ async function main() {
     await prisma.company.deleteMany();
     await prisma.workspaceUser.deleteMany();
     await prisma.companyUser.deleteMany();
+    await prisma.account.deleteMany(); // Better-Auth accounts
+    await prisma.session.deleteMany(); // Better-Auth sessions
+    await prisma.verification.deleteMany(); // Better-Auth verifications
     await prisma.user.deleteMany();
+    await prisma.auditLog.deleteMany(); // Internal admin audit logs
+    await prisma.internalUser.deleteMany(); // Internal admin users
     await prisma.job.deleteMany();
     // Note: RegionDataStore is not deleted - it's configuration data
 
@@ -191,6 +239,274 @@ async function main() {
     console.log(`✅ Created ${companies.length} companies\n`);
 
     // ============================================
+    // 2.5. CREATE TEST USERS WITH PASSWORDS
+    // ============================================
+    console.log('👥 Creating test users with passwords...');
+
+    // Create test users for Acme Corp with different roles
+    const acmeOwnerPassword = generatePassword();
+    const hashedAcmeOwnerPassword = await hashPassword(acmeOwnerPassword);
+    const acmeOwner = await prisma.user.create({
+        data: {
+            email: 'owner@acme.com',
+            name: 'Acme Owner',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true // Better-Auth field
+        }
+    });
+    // Create Better-Auth Account record
+    await prisma.account.create({
+        data: {
+            accountId: acmeOwner.email,
+            providerId: 'credential',
+            userId: acmeOwner.id,
+            password: hashedAcmeOwnerPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: acmeCorp.id,
+            userId: acmeOwner.id,
+            role: 'owner',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'owner@acme.com',
+        password: acmeOwnerPassword,
+        name: 'Acme Owner',
+        role: 'OWNER',
+        company: 'Acme Corp',
+        type: 'customer'
+    });
+
+    const acmeAdminPassword = generatePassword();
+    const hashedAcmeAdminPassword = await hashPassword(acmeAdminPassword);
+    const acmeAdmin = await prisma.user.create({
+        data: {
+            email: 'admin@acme.com',
+            name: 'Acme Admin',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: acmeAdmin.email,
+            providerId: 'credential',
+            userId: acmeAdmin.id,
+            password: hashedAcmeAdminPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: acmeCorp.id,
+            userId: acmeAdmin.id,
+            role: 'admin',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'admin@acme.com',
+        password: acmeAdminPassword,
+        name: 'Acme Admin',
+        role: 'ADMIN',
+        company: 'Acme Corp',
+        type: 'customer'
+    });
+
+    const acmeMemberPassword = generatePassword();
+    const hashedAcmeMemberPassword = await hashPassword(acmeMemberPassword);
+    const acmeMember = await prisma.user.create({
+        data: {
+            email: 'member@acme.com',
+            name: 'Acme Member',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: acmeMember.email,
+            providerId: 'credential',
+            userId: acmeMember.id,
+            password: hashedAcmeMemberPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: acmeCorp.id,
+            userId: acmeMember.id,
+            role: 'member',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'member@acme.com',
+        password: acmeMemberPassword,
+        name: 'Acme Member',
+        role: 'MEMBER',
+        company: 'Acme Corp',
+        type: 'customer'
+    });
+
+    const acmeViewerPassword = generatePassword();
+    const hashedAcmeViewerPassword = await hashPassword(acmeViewerPassword);
+    const acmeViewer = await prisma.user.create({
+        data: {
+            email: 'viewer@acme.com',
+            name: 'Acme Viewer',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: acmeViewer.email,
+            providerId: 'credential',
+            userId: acmeViewer.id,
+            password: hashedAcmeViewerPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: acmeCorp.id,
+            userId: acmeViewer.id,
+            role: 'viewer',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'viewer@acme.com',
+        password: acmeViewerPassword,
+        name: 'Acme Viewer',
+        role: 'VIEWER',
+        company: 'Acme Corp',
+        type: 'customer'
+    });
+
+    // Create test users for GlobalTech EU
+    const globalTechOwnerPassword = generatePassword();
+    const hashedGlobalTechOwnerPassword = await hashPassword(
+        globalTechOwnerPassword
+    );
+    const globalTechOwner = await prisma.user.create({
+        data: {
+            email: 'owner@globaltech.com',
+            name: 'GlobalTech Owner',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: globalTechOwner.email,
+            providerId: 'credential',
+            userId: globalTechOwner.id,
+            password: hashedGlobalTechOwnerPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: globalTech.id,
+            userId: globalTechOwner.id,
+            role: 'owner',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'owner@globaltech.com',
+        password: globalTechOwnerPassword,
+        name: 'GlobalTech Owner',
+        role: 'OWNER',
+        company: 'GlobalTech EU',
+        type: 'customer'
+    });
+
+    const globalTechAdminPassword = generatePassword();
+    const hashedGlobalTechAdminPassword = await hashPassword(
+        globalTechAdminPassword
+    );
+    const globalTechAdmin = await prisma.user.create({
+        data: {
+            email: 'admin@globaltech.com',
+            name: 'GlobalTech Admin',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: globalTechAdmin.email,
+            providerId: 'credential',
+            userId: globalTechAdmin.id,
+            password: hashedGlobalTechAdminPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: globalTech.id,
+            userId: globalTechAdmin.id,
+            role: 'admin',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'admin@globaltech.com',
+        password: globalTechAdminPassword,
+        name: 'GlobalTech Admin',
+        role: 'ADMIN',
+        company: 'GlobalTech EU',
+        type: 'customer'
+    });
+
+    const globalTechMemberPassword = generatePassword();
+    const hashedGlobalTechMemberPassword = await hashPassword(
+        globalTechMemberPassword
+    );
+    const globalTechMember = await prisma.user.create({
+        data: {
+            email: 'member@globaltech.com',
+            name: 'GlobalTech Member',
+            isVerified: true,
+            onboardingState: 'completed',
+            emailVerified: true
+        }
+    });
+    await prisma.account.create({
+        data: {
+            accountId: globalTechMember.email,
+            providerId: 'credential',
+            userId: globalTechMember.id,
+            password: hashedGlobalTechMemberPassword
+        }
+    });
+    await prisma.companyUser.create({
+        data: {
+            companyId: globalTech.id,
+            userId: globalTechMember.id,
+            role: 'member',
+            onboardingStep: 'COMPLETE'
+        }
+    });
+    userCredentials.push({
+        email: 'member@globaltech.com',
+        password: globalTechMemberPassword,
+        name: 'GlobalTech Member',
+        role: 'MEMBER',
+        company: 'GlobalTech EU',
+        type: 'customer'
+    });
+
+    console.log(`✅ Created ${userCredentials.length} test users\n`);
+
+    // ============================================
     // 3. COMPANY PLANS & ADD-ONS
     // ============================================
     console.log('💳 Assigning plans and add-ons...');
@@ -264,6 +580,81 @@ async function main() {
     const allWorkspaces = [...acmeWorkspaces, ...globalTechWorkspaces];
 
     console.log(`✅ Created ${allWorkspaces.length} workspaces\n`);
+
+    // ============================================
+    // 4.5. CREATE WORKSPACE USERS
+    // ============================================
+    console.log('👥 Assigning users to workspaces...');
+
+    // Assign Acme users to workspaces
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: acmeWorkspaces[0]!.id,
+            companyId: acmeCorp.id,
+            userId: acmeOwner.id,
+            role: 'owner'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: acmeWorkspaces[0]!.id,
+            companyId: acmeCorp.id,
+            userId: acmeAdmin.id,
+            role: 'admin'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: acmeWorkspaces[0]!.id,
+            companyId: acmeCorp.id,
+            userId: acmeMember.id,
+            role: 'member'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: acmeWorkspaces[1]!.id,
+            companyId: acmeCorp.id,
+            userId: acmeOwner.id,
+            role: 'owner'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: acmeWorkspaces[1]!.id,
+            companyId: acmeCorp.id,
+            userId: acmeAdmin.id,
+            role: 'admin'
+        }
+    });
+
+    // Assign GlobalTech users to workspace
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: globalTechWorkspaces[0]!.id,
+            companyId: globalTech.id,
+            userId: globalTechOwner.id,
+            role: 'owner'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: globalTechWorkspaces[0]!.id,
+            companyId: globalTech.id,
+            userId: globalTechAdmin.id,
+            role: 'admin'
+        }
+    });
+    await prisma.workspaceUser.create({
+        data: {
+            workspaceId: globalTechWorkspaces[0]!.id,
+            companyId: globalTech.id,
+            userId: globalTechMember.id,
+            role: 'member'
+        }
+    });
+
+    console.log('✅ Assigned users to workspaces\n');
 
     // ============================================
     // 5. PROJECTS
@@ -857,7 +1248,13 @@ async function main() {
                 description: 'Schema for user update events',
                 jsonSchema: {
                     type: 'object',
-                    required: ['action', 'category', 'actor', 'payload', 'changes'],
+                    required: [
+                        'action',
+                        'category',
+                        'actor',
+                        'payload',
+                        'changes'
+                    ],
                     properties: {
                         action: { type: 'string', const: 'user.updated' },
                         category: { type: 'string', enum: ['auth', 'billing'] },
@@ -957,7 +1354,40 @@ async function main() {
     console.log('✅ Created event schemas\n');
 
     // ============================================
-    // 14. GDPR REQUESTS (Phase 3)
+    // 14. INTERNAL ADMIN USER
+    // ============================================
+    console.log('🔐 Creating internal admin user...');
+
+    const internalAdminPassword = generatePassword();
+    const hashedInternalPassword = await hashPassword(internalAdminPassword);
+
+    const internalAdmin = await prisma.internalUser.upsert({
+        where: { email: 'mark@hyrelog.com' },
+        update: {
+            password: hashedInternalPassword,
+            name: 'Mark Admin',
+            role: InternalUserRole.SUPER_ADMIN
+        },
+        create: {
+            email: 'mark@hyrelog.com',
+            password: hashedInternalPassword,
+            name: 'Mark Admin',
+            role: InternalUserRole.SUPER_ADMIN
+        }
+    });
+
+    userCredentials.push({
+        email: 'mark@hyrelog.com',
+        password: internalAdminPassword,
+        name: 'Mark Admin',
+        role: 'SUPER_ADMIN',
+        type: 'internal'
+    });
+
+    console.log('✅ Created internal admin user\n');
+
+    // ============================================
+    // 15. GDPR REQUESTS (Phase 3)
     // ============================================
     console.log('🔒 Creating sample GDPR requests...');
 
@@ -967,7 +1397,8 @@ async function main() {
         update: {},
         create: {
             email: 'gdpr-admin@example.com',
-            name: 'GDPR Admin'
+            name: 'GDPR Admin',
+            isVerified: true
         }
     });
 
@@ -1113,17 +1544,63 @@ async function main() {
         }))
     );
 
+    console.log('\n👥 User Credentials (SAVE THESE PASSWORDS!):');
+    console.log('='.repeat(80));
+    console.log('\n📧 Customer Users:');
+    console.table(
+        userCredentials
+            .filter((u) => u.type === 'customer')
+            .map((u) => ({
+                Email: u.email,
+                Password: u.password,
+                Name: u.name,
+                Role: u.role,
+                Company: u.company
+            }))
+    );
+    console.log('\n🔐 Internal Admin User:');
+    console.table(
+        userCredentials
+            .filter((u) => u.type === 'internal')
+            .map((u) => ({
+                Email: u.email,
+                Password: u.password,
+                Name: u.name,
+                Role: u.role
+            }))
+    );
+    console.log(
+        '\n⚠️  IMPORTANT: These passwords are randomly generated and shown only once!'
+    );
+    console.log('⚠️  Save them securely - they will not be displayed again.');
+    console.log(
+        '\n📝 NOTE: Customer user passwords need to be set through Better-Auth.'
+    );
+    console.log(
+        '   You can sign up with these emails and use the generated passwords,'
+    );
+    console.log(
+        "   or create accounts programmatically through Better-Auth's API."
+    );
+    console.log(
+        '   Internal admin user (mark@hyrelog.com) password is already set.\n'
+    );
+
     console.log('\n💡 Next Steps:');
     console.log('   1. Test API endpoints with the API keys above');
+    console.log('   2. Login to dashboard with the user credentials above');
     console.log(
-        '   2. Run archival job: npm run worker (or wait for cron at 4 AM)'
+        '   3. Test internal admin portal at /internal/login with mark@hyrelog.com'
     );
     console.log(
-        '   3. Test archive export: GET /v1/key/company/export-archive.json'
+        '   4. Run archival job: npm run worker (or wait for cron at 4 AM)'
     );
-    console.log('   4. Run webhook worker: npm run worker:webhook');
-    console.log('   5. Test export endpoints');
-    console.log('   6. Test SSE tailing endpoint');
+    console.log(
+        '   5. Test archive export: GET /v1/key/company/export-archive.json'
+    );
+    console.log('   6. Run webhook worker: npm run worker:webhook');
+    console.log('   7. Test export endpoints');
+    console.log('   8. Test SSE tailing endpoint');
     console.log('\n📦 Archival Testing:');
     console.log(
         `   - ${oldEvents.length} events are marked as archival candidates`
@@ -1137,7 +1614,9 @@ async function main() {
     console.log('   - Event schemas created for workspace_1 (Core App)');
     console.log('   - Event schemas created for workspace_2 (Data Platform)');
     console.log('   - Test schema validation with: hyrelog schema pull');
-    console.log('   - Test schema push with: hyrelog schema push <schema.json>');
+    console.log(
+        '   - Test schema push with: hyrelog schema push <schema.json>'
+    );
     console.log('\n');
 }
 
@@ -1147,6 +1626,22 @@ main()
         process.exit(1);
     })
     .finally(async () => {
-        await prisma.$disconnect();
-        await pool.end();
+        try {
+            // Disconnect Prisma first
+            await prisma.$disconnect();
+        } catch (error) {
+            // Ignore disconnect errors - may already be disconnected
+        }
+
+        try {
+            // Close pool gracefully
+            await pool.end();
+        } catch (error) {
+            // Ignore pool end errors - connections may already be closed
+            // This is common when the database terminates connections
+        }
+
+        // Give Node.js event loop a moment to process any pending events
+        // This helps prevent "unhandled error event" warnings
+        await new Promise((resolve) => setTimeout(resolve, 100));
     });

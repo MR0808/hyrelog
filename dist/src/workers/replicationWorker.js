@@ -1,7 +1,7 @@
-import { Region, DataRegion } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
-import { getPrismaForRegion, getPrismaForCompany } from "@/lib/regionClient";
-import { computeEventHash } from "@/lib/hashchain";
+import { Region, DataRegion, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { getPrismaForRegion, getPrismaForCompany } from '@/lib/regionClient';
+import { computeEventHash } from '@/lib/hashchain';
 /**
  * Replicates events from primary region to replica regions.
  */
@@ -10,14 +10,14 @@ export async function processReplicationJobs() {
     const companies = await prisma.company.findMany({
         where: {
             replicateTo: {
-                isEmpty: false,
-            },
+                isEmpty: false
+            }
         },
         select: {
             id: true,
             dataRegion: true,
-            replicateTo: true,
-        },
+            replicateTo: true
+        }
     });
     for (const company of companies) {
         try {
@@ -40,11 +40,11 @@ async function replicateCompanyEvents(companyId, primaryRegion, replicaRegions) 
             companyId,
             archived: false,
             createdAt: {
-                gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-            },
+                gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+            }
         },
-        orderBy: { createdAt: "asc" },
-        take: 1000,
+        orderBy: { createdAt: 'asc' },
+        take: 1000
     });
     for (const replicaRegion of replicaRegions) {
         const replicaPrisma = await getPrismaForRegion(replicaRegion);
@@ -52,7 +52,7 @@ async function replicateCompanyEvents(companyId, primaryRegion, replicaRegions) 
             try {
                 // Check if event already exists in replica
                 const existing = await replicaPrisma.auditEvent.findUnique({
-                    where: { id: event.id },
+                    where: { id: event.id }
                 });
                 if (existing) {
                     continue; // Already replicated
@@ -61,10 +61,10 @@ async function replicateCompanyEvents(companyId, primaryRegion, replicaRegions) 
                 const prevEvent = await replicaPrisma.auditEvent.findFirst({
                     where: {
                         companyId: event.companyId,
-                        workspaceId: event.workspaceId,
+                        workspaceId: event.workspaceId
                     },
-                    orderBy: { createdAt: "desc" },
-                    select: { hash: true },
+                    orderBy: { createdAt: 'desc' },
+                    select: { hash: true }
                 });
                 const prevHash = prevEvent?.hash ?? null;
                 // Compute hash for replica (should match primary)
@@ -79,7 +79,7 @@ async function replicateCompanyEvents(companyId, primaryRegion, replicaRegions) 
                     actorId: event.actorId ?? null,
                     actorEmail: event.actorEmail ?? null,
                     actorName: event.actorName ?? null,
-                    createdAt: event.createdAt,
+                    createdAt: event.createdAt
                 }, prevHash);
                 // Create event in replica region
                 await replicaPrisma.auditEvent.create({
@@ -104,8 +104,8 @@ async function replicateCompanyEvents(companyId, primaryRegion, replicaRegions) 
                         dataRegion: replicaRegion, // Region enum matches DataRegion enum
                         archived: event.archived,
                         archivalCandidate: event.archivalCandidate,
-                        createdAt: event.createdAt,
-                    },
+                        createdAt: event.createdAt
+                    }
                 });
             }
             catch (error) {

@@ -7,15 +7,15 @@ export declare const processGdprExport: (jobId: string) => Promise<void>;
  * Gets the next pending job of the specified type.
  */
 export declare const getNextPendingJob: (type: JobType) => Promise<{
-    params: Prisma.JsonValue | null;
     type: import("@prisma/client").$Enums.JobType;
-    status: import("@prisma/client").$Enums.JobStatus;
     error: string | null;
+    params: Prisma.JsonValue | null;
     result: Prisma.JsonValue | null;
     id: string;
     createdAt: Date;
     updatedAt: Date;
     companyId: string;
+    status: import("@prisma/client").$Enums.JobStatus;
     startedAt: Date | null;
     completedAt: Date | null;
 } | null>;

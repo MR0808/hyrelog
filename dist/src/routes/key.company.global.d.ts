@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync } from 'fastify';
 /**
  * Global multi-region event search endpoint.
  * Uses GlobalEventIndex for metadata lookup, then fetches full events from regional DBs.

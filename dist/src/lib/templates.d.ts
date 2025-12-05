@@ -1,24 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 export declare const templateConfigSchema: z.ZodObject<{
-    requiredActorFields: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
-    requiredMetadataKeys: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
-    defaultCategories: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+    requiredActorFields: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    requiredMetadataKeys: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    defaultCategories: z.ZodOptional<z.ZodArray<z.ZodString>>;
     retentionOverride: z.ZodOptional<z.ZodNumber>;
     requireProject: z.ZodOptional<z.ZodBoolean>;
-}, "strip", z.ZodTypeAny, {
-    requiredActorFields?: string[] | undefined;
-    requiredMetadataKeys?: string[] | undefined;
-    defaultCategories?: string[] | undefined;
-    retentionOverride?: number | undefined;
-    requireProject?: boolean | undefined;
-}, {
-    requiredActorFields?: string[] | undefined;
-    requiredMetadataKeys?: string[] | undefined;
-    defaultCategories?: string[] | undefined;
-    retentionOverride?: number | undefined;
-    requireProject?: boolean | undefined;
-}>;
+}, z.core.$strip>;
 export type TemplateConfig = z.infer<typeof templateConfigSchema>;
 export type EventValidationInput = {
     action: string;

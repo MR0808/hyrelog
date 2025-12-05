@@ -69,96 +69,214 @@ enum AddOnCode {
   RETENTION_S3_ARCHIVE
 }
 
+enum BillingMode {
+  STRIPE
+  CUSTOM
+}
+
+enum InvoiceTerm {
+  NET_30
+  NET_60
+  MANUAL
+}
+
+enum PlanTier {
+  FREE
+  STARTER
+  GROWTH
+  SCALE
+  ENTERPRISE
+}
+
+enum OnboardingStep {
+  START
+  COMPANY
+  PLAN
+  BILLING
+  WORKSPACE
+  API_KEY
+  SEND_EVENT
+  COMPLETE
+}
+
+enum InternalUserRole {
+  SUPER_ADMIN
+  SALES_ADMIN
+  SUPPORT_ADMIN
+  BILLING_ADMIN
+}
+
 model User {
-  id        String        @id @default(cuid())
-  email     String        @unique
-  name      String?
-  imageUrl  String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  companies CompanyUser[]
-  workspaces WorkspaceUser[]
+  id              String          @id @default(cuid())
+  email           String          @unique
+  name            String?
+  imageUrl        String?
+  isVerified      Boolean         @default(false)
+  onboardingState String? // "not_started" | "in_progress" | "completed"
+  emailVerified   Boolean         @default(false) // Better-Auth field
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  companies       CompanyUser[]
+  workspaces      WorkspaceUser[]
+  // Better-Auth relations (for dashboard)
+  sessions        Session[]
+  accounts        Account[]
+}
+
+// Better-Auth models (used by dashboard)
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String? // Hashed password (for email/password auth)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@map("verification")
 }
 
 model Company {
-  id                 String                 @id @default(cuid())
-  name               String
-  slug               String                 @unique
-  retentionDays      Int                    @default(90)
-  dataRegion         Region                 @default(AU)
-  replicateTo        Region[]
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-  workspaces         Workspace[]
-  projects           Project[]
-  members            CompanyUser[]
-  workspaceMembers   WorkspaceUser[]
-  apiKeys            ApiKey[]
-  apiKeyLogs         ApiKeyLog[]
-  plans              CompanyPlan?
-  addOns             CompanyAddOn[]
-  billingMeters      BillingMeter[]
-  usageStats         UsageStats[]
-  configChangeLogs   ConfigChangeLog[]
-  notificationAlerts NotificationThreshold[]
-  auditEvents        AuditEvent[]
-  jobs                Job[]
-  webhooks           Webhook[]
-  templates          WorkspaceTemplate[]
-  thresholdAlerts    ThresholdAlert[]
-  templateAssignments WorkspaceTemplateAssignment[]
-  gdprRequests       GdprRequest[]
-  globalEventIndex   GlobalEventIndex[]
-  pendingWrites      PendingWrite[]
+  id                   String                        @id @default(cuid())
+  name                 String
+  slug                 String                        @unique
+  retentionDays        Int                           @default(90)
+  dataRegion           Region                        @default(AU)
+  replicateTo          Region[]
+  // Onboarding tracking
+  onboardingStep       OnboardingStep?
+  // Billing mode (STRIPE for self-serve, CUSTOM for enterprise)
+  billingMode          BillingMode                   @default(STRIPE)
+  // Plan tier (for display/filtering)
+  planTier             PlanTier?
+  // Custom billing fields (for enterprise)
+  customMonthlyPrice   Int? // Price in cents
+  customEventLimit     Int? // Custom event limit override
+  customRetentionDays  Int? // Custom retention override
+  // Invoice/contract terms (for enterprise)
+  invoiceTerm          InvoiceTerm?
+  contractStart        DateTime?
+  contractEnd          DateTime?
+  crmDealId            String? // CRM integration ID (e.g., Salesforce deal ID)
+  // Stripe subscription fields
+  stripeCustomerId     String?                       @unique
+  stripeSubscriptionId String?                       @unique
+  stripePriceId        String? // Current price ID
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  workspaces           Workspace[]
+  projects             Project[]
+  members              CompanyUser[]
+  workspaceMembers     WorkspaceUser[]
+  apiKeys              ApiKey[]
+  apiKeyLogs           ApiKeyLog[]
+  plans                CompanyPlan?
+  addOns               CompanyAddOn[]
+  billingMeters        BillingMeter[]
+  usageStats           UsageStats[]
+  configChangeLogs     ConfigChangeLog[]
+  notificationAlerts   NotificationThreshold[]
+  auditEvents          AuditEvent[]
+  jobs                 Job[]
+  webhooks             Webhook[]
+  templates            WorkspaceTemplate[]
+  thresholdAlerts      ThresholdAlert[]
+  templateAssignments  WorkspaceTemplateAssignment[]
+  gdprRequests         GdprRequest[]
+  globalEventIndex     GlobalEventIndex[]
+  pendingWrites        PendingWrite[]
+
+  @@index([billingMode])
+  @@index([planTier])
+  @@index([onboardingStep])
+  @@index([stripeCustomerId])
 }
 
 model Workspace {
-  id            String                      @id @default(cuid())
-  companyId     String
-  name          String
-  slug          String
-  retentionDays Int?
-  createdAt     DateTime                    @default(now())
-  updatedAt     DateTime                    @updatedAt
-  company       Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projects      Project[]
-  members       WorkspaceUser[]
-  apiKeys       ApiKey[]
-  apiKeyLogs    ApiKeyLog[]
-  billingMeters BillingMeter[]
-  usageStats    UsageStats[]
-  auditEvents   AuditEvent[]
-  configLogs    ConfigChangeLog[]
-  webhooks      Webhook[]
+  id                  String                        @id @default(cuid())
+  companyId           String
+  name                String
+  slug                String
+  retentionDays       Int?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  company             Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects            Project[]
+  members             WorkspaceUser[]
+  apiKeys             ApiKey[]
+  apiKeyLogs          ApiKeyLog[]
+  billingMeters       BillingMeter[]
+  usageStats          UsageStats[]
+  auditEvents         AuditEvent[]
+  configLogs          ConfigChangeLog[]
+  webhooks            Webhook[]
   templateAssignments WorkspaceTemplateAssignment[]
-  eventSchemas  EventSchema[]               // Phase 4: Schema Registry
+  eventSchemas        EventSchema[] // Phase 4: Schema Registry
 
   @@unique([companyId, slug])
 }
 
 model Project {
-  id          String     @id @default(cuid())
+  id          String       @id @default(cuid())
   workspaceId String
   companyId   String
   name        String
   slug        String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   events      AuditEvent[]
 
   @@unique([workspaceId, slug])
 }
 
 model CompanyUser {
-  id        String   @id @default(cuid())
-  companyId String
-  userId    String
-  role      String   @default("member")
-  createdAt DateTime @default(now())
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String          @id @default(cuid())
+  companyId      String
+  userId         String
+  role           String          @default("member")
+  onboardingStep OnboardingStep? // Track onboarding progress per user-company relationship
+  createdAt      DateTime        @default(now())
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, userId])
 }
@@ -178,31 +296,32 @@ model WorkspaceUser {
 }
 
 model Plan {
-  id                String         @id @default(cuid())
-  code              String         @unique
+  id                String        @id @default(cuid())
+  code              String        @unique
   name              String
   description       String?
   monthlyEventLimit Int
   retentionDays     Int
   priceCents        Int
-  active            Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  tier              PlanTier? // Plan tier for filtering/display
+  active            Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
   companies         CompanyPlan[]
 }
 
 model AddOn {
-  id                String          @id @default(cuid())
-  code              AddOnCode       @unique
-  name              String
-  description       String?
-  eventsBoost       Int             @default(0)
-  retentionBoost    Int             @default(0)
-  priceCents        Int             @default(0)
-  active            Boolean         @default(true)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  companies         CompanyAddOn[]
+  id             String         @id @default(cuid())
+  code           AddOnCode      @unique
+  name           String
+  description    String?
+  eventsBoost    Int            @default(0)
+  retentionBoost Int            @default(0)
+  priceCents     Int            @default(0)
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  companies      CompanyAddOn[]
 }
 
 model CompanyPlan {
@@ -265,31 +384,31 @@ model UsageStats {
 }
 
 model ApiKey {
-  id                String     @id @default(cuid())
-  companyId         String
-  workspaceId       String?
-  name              String
-  prefix            String     @unique
-  hashedKey         String     @unique
-  type              ApiKeyType
-  readOnly          Boolean    @default(false)
-  lastUsedAt        DateTime?
-  lastUsedIp        String?
-  lastUsedEndpoint  String?
-  healthScore       Int        @default(100) // 0-100, based on usage patterns
-  rotationPolicy    Json?      // { enabled: boolean, intervalDays: number, autoRotate: boolean }
-  labels            String[]   @default([]) // For organization/tagging
-  ipAllowlist       String[]   @default([]) // IP addresses/CIDR blocks allowed
-  expiresAt         DateTime?  // For short-lived keys (CI/CD)
-  revokedAt         DateTime?
-  revokedReason     String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  company           Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace         Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  logs              ApiKeyLog[]
-  rotatedFrom       String?    // ID of key this was rotated from
-  rotatedTo         String?    // ID of key this was rotated to
+  id               String      @id @default(cuid())
+  companyId        String
+  workspaceId      String?
+  name             String
+  prefix           String      @unique
+  hashedKey        String      @unique
+  type             ApiKeyType
+  readOnly         Boolean     @default(false)
+  lastUsedAt       DateTime?
+  lastUsedIp       String?
+  lastUsedEndpoint String?
+  healthScore      Int         @default(100) // 0-100, based on usage patterns
+  rotationPolicy   Json? // { enabled: boolean, intervalDays: number, autoRotate: boolean }
+  labels           String[]    @default([]) // For organization/tagging
+  ipAllowlist      String[]    @default([]) // IP addresses/CIDR blocks allowed
+  expiresAt        DateTime? // For short-lived keys (CI/CD)
+  revokedAt        DateTime?
+  revokedReason    String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace        Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs             ApiKeyLog[]
+  rotatedFrom      String? // ID of key this was rotated from
+  rotatedTo        String? // ID of key this was rotated to
 }
 
 model ApiKeyLog {
@@ -314,7 +433,7 @@ model ApiKeyLog {
 }
 
 model AuditEvent {
-  id                String              @id @default(cuid())
+  id                String            @id @default(cuid())
   companyId         String
   workspaceId       String
   projectId         String?
@@ -335,16 +454,16 @@ model AuditEvent {
   hash              String
   prevHash          String?
   traceId           String?
-  archived          Boolean             @default(false)
-  archivalCandidate Boolean             @default(false)
+  archived          Boolean           @default(false)
+  archivalCandidate Boolean           @default(false)
   dataRegion        DataRegion?
-  isWarmArchived    Boolean             @default(false)
-  isColdArchived    Boolean             @default(false)
+  isWarmArchived    Boolean           @default(false)
+  isColdArchived    Boolean           @default(false)
   coldArchiveKey    String?
-  createdAt         DateTime            @default(now())
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project           Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   webhookDeliveries WebhookDelivery[]
 
   @@index([workspaceId, createdAt])
@@ -394,7 +513,7 @@ enum JobStatus {
 
 model Job {
   id          String    @id @default(cuid())
-  companyId  String
+  companyId   String
   type        JobType
   status      JobStatus @default(PENDING)
   /**
@@ -417,16 +536,16 @@ model Job {
 }
 
 model Webhook {
-  id          String             @id @default(cuid())
+  id          String            @id @default(cuid())
   companyId   String
   workspaceId String?
   url         String
-  isActive    Boolean            @default(true)
+  isActive    Boolean           @default(true)
   secret      String
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace   Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   deliveries  WebhookDelivery[]
 
   @@index([companyId, workspaceId, isActive])
@@ -465,30 +584,30 @@ model WorkspaceTemplate {
 }
 
 model WorkspaceTemplateAssignment {
-  id          String             @id @default(cuid())
+  id          String            @id @default(cuid())
   companyId   String
   workspaceId String
   templateId  String
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  template    WorkspaceTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template    WorkspaceTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId])
   @@index([companyId, workspaceId])
 }
 
 model ThresholdAlert {
-  id            String           @id @default(cuid())
-  companyId     String
-  meterType     BillingMeterType
-  thresholdType ThresholdType
+  id             String           @id @default(cuid())
+  companyId      String
+  meterType      BillingMeterType
+  thresholdType  ThresholdType
   thresholdValue Int
-  currentValue  Int
-  periodStart   DateTime
-  createdAt     DateTime         @default(now())
-  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  currentValue   Int
+  periodStart    DateTime
+  createdAt      DateTime         @default(now())
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
 }
@@ -498,25 +617,25 @@ model RegionDataStore {
   region              Region   @unique
   dbUrl               String
   readOnlyUrl         String?
-  coldStorageProvider String   // aws, azure, gcp
+  coldStorageProvider String // aws, azure, gcp
   coldStorageBucket   String
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
 
 model GlobalEventIndex {
-  id            String   @id @default(cuid())
-  companyId     String
-  workspaceId   String
-  projectId     String?
-  dataRegion    Region
-  occurredAt    DateTime
-  action        String
-  category      String
-  actorId       String?
-  actorEmail    String?
-  createdAt     DateTime @default(now())
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  companyId   String
+  workspaceId String
+  projectId   String?
+  dataRegion  Region
+  occurredAt  DateTime
+  action      String
+  category    String
+  actorId     String?
+  actorEmail  String?
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, occurredAt])
   @@index([dataRegion, occurredAt])
@@ -526,16 +645,16 @@ model GlobalEventIndex {
 }
 
 model GdprRequest {
-  id                String             @id @default(cuid())
+  id                String                @id @default(cuid())
   companyId         String
   requestedByUserId String
   actorEmail        String?
   actorId           String?
   requestType       GdprRequestType
-  status            GdprRequestStatus  @default(CUSTOMER_PENDING)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status            GdprRequestStatus     @default(CUSTOMER_PENDING)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   approvals         GdprRequestApproval[]
 
   @@index([companyId, status])
@@ -543,41 +662,73 @@ model GdprRequest {
 }
 
 model GdprRequestApproval {
-  id             String          @id @default(cuid())
-  gdprRequestId  String
+  id               String           @id @default(cuid())
+  gdprRequestId    String
   approvedByUserId String
-  approvalType   GdprApprovalType
-  createdAt      DateTime        @default(now())
-  request        GdprRequest     @relation(fields: [gdprRequestId], references: [id], onDelete: Cascade)
+  approvalType     GdprApprovalType
+  createdAt        DateTime         @default(now())
+  request          GdprRequest      @relation(fields: [gdprRequestId], references: [id], onDelete: Cascade)
 
   @@index([gdprRequestId])
 }
 
 model PendingWrite {
-  id          String   @id @default(cuid())
-  companyId   String
-  region      Region
-  eventData   Json
-  createdAt   DateTime @default(now())
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  companyId String
+  region    Region
+  eventData Json
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([region, createdAt])
   @@index([companyId, createdAt])
 }
 
 model EventSchema {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  eventType     String   // e.g., "user.created", "payment.processed"
-  description   String?
-  jsonSchema    Json     // JSON Schema definition
-  version       Int      @default(1) // Schema version for this eventType
-  isActive      Boolean  @default(true) // Whether this schema is currently active
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  workspaceId String
+  eventType   String // e.g., "user.created", "payment.processed"
+  description String?
+  jsonSchema  Json // JSON Schema definition
+  version     Int       @default(1) // Schema version for this eventType
+  isActive    Boolean   @default(true) // Whether this schema is currently active
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, eventType, version])
   @@index([workspaceId, eventType, isActive])
   @@index([workspaceId, isActive])
+}
+
+model InternalUser {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  password       String // Hashed password (use Argon2)
+  name           String?
+  role           InternalUserRole
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  impersonations AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  internalUserId  String // Who performed the action
+  action          String // "IMPERSONATE_USER" | "CREATE_COMPANY" | etc.
+  targetUserId    String? // User being impersonated
+  targetCompanyId String? // Company being accessed
+  metadata        Json? // Additional context
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  internalUser InternalUser @relation(fields: [internalUserId], references: [id], onDelete: Cascade)
+
+  @@index([internalUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([targetCompanyId, createdAt])
 }

@@ -1,4 +1,4 @@
-import { Region } from "@prisma/client";
+import { Region } from '@prisma/client';
 /**
  * Checks if a region is healthy.
  */

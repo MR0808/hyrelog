@@ -150,10 +150,10 @@ export const keyCompanyLifecycleRoutes: FastifyPluginAsync = async (app) => {
   });
 
   /**
-   * Get company API key usage statistics
-   * GET /v1/key/company/usage
+   * Get company API key usage statistics and health metrics
+   * GET /v1/key/company/stats
    */
-  app.get("/v1/key/company/usage", async (request, reply) => {
+  app.get("/v1/key/company/stats", async (request, reply) => {
     const ctx = await authenticateApiKey(request, { allow: [ApiKeyType.COMPANY] });
 
     const { from, to } = request.query as { from?: string; to?: string };
@@ -200,7 +200,10 @@ export const keyCompanyLifecycleRoutes: FastifyPluginAsync = async (app) => {
     );
 
     Object.keys(endpointStats).forEach((endpoint) => {
-      endpointStats[endpoint].avgLatency /= endpointStats[endpoint].count;
+      const stats = endpointStats[endpoint];
+      if (stats) {
+        stats.avgLatency /= stats.count;
+      }
     });
 
     const errorRate = totalRequests > 0 ? errorRequests / totalRequests : 0;

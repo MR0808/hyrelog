@@ -124,6 +124,8 @@ curl -H "x-hyrelog-key: YOUR_WORKSPACE_KEY" \
 
 ### 4. Test Event Ingestion
 
+**⚠️ Important**: Use the correct endpoint `/v1/key/workspace/events` (not `/v1/events`)
+
 ```bash
 curl -X POST \
   -H "x-hyrelog-key: YOUR_WORKSPACE_KEY" \
@@ -141,6 +143,11 @@ curl -X POST \
   }' \
   http://localhost:4040/v1/key/workspace/events
 ```
+
+**Common mistakes:**
+- ❌ `/v1/events` - This endpoint does not exist
+- ✅ `/v1/key/workspace/events` - Correct endpoint for workspace event ingestion
+- ✅ `/v1/key/company/events` - Correct endpoint for company event queries (GET only)
 
 ### 5. Test Export
 

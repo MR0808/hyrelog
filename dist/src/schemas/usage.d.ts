@@ -4,36 +4,14 @@ export declare const usageStatsSchema: z.ZodObject<{
     periodEnd: z.ZodString;
     eventsIngested: z.ZodNumber;
     eventsQueried: z.ZodNumber;
-}, "strip", z.ZodTypeAny, {
-    periodStart: string;
-    periodEnd: string;
-    eventsIngested: number;
-    eventsQueried: number;
-}, {
-    periodStart: string;
-    periodEnd: string;
-    eventsIngested: number;
-    eventsQueried: number;
-}>;
+}, z.core.$strip>;
 export declare const billingMeterSchema: z.ZodObject<{
     meterType: z.ZodString;
     currentValue: z.ZodNumber;
     limit: z.ZodNumber;
     periodStart: z.ZodString;
     periodEnd: z.ZodString;
-}, "strip", z.ZodTypeAny, {
-    meterType: string;
-    currentValue: number;
-    limit: number;
-    periodStart: string;
-    periodEnd: string;
-}, {
-    meterType: string;
-    currentValue: number;
-    limit: number;
-    periodStart: string;
-    periodEnd: string;
-}>;
+}, z.core.$strip>;
 export declare const usageResponseSchema: z.ZodObject<{
     meter: z.ZodObject<{
         meterType: z.ZodString;
@@ -41,63 +19,13 @@ export declare const usageResponseSchema: z.ZodObject<{
         limit: z.ZodNumber;
         periodStart: z.ZodString;
         periodEnd: z.ZodString;
-    }, "strip", z.ZodTypeAny, {
-        meterType: string;
-        currentValue: number;
-        limit: number;
-        periodStart: string;
-        periodEnd: string;
-    }, {
-        meterType: string;
-        currentValue: number;
-        limit: number;
-        periodStart: string;
-        periodEnd: string;
-    }>;
+    }, z.core.$strip>;
     usage: z.ZodObject<{
         periodStart: z.ZodString;
         periodEnd: z.ZodString;
         eventsIngested: z.ZodNumber;
         eventsQueried: z.ZodNumber;
-    }, "strip", z.ZodTypeAny, {
-        periodStart: string;
-        periodEnd: string;
-        eventsIngested: number;
-        eventsQueried: number;
-    }, {
-        periodStart: string;
-        periodEnd: string;
-        eventsIngested: number;
-        eventsQueried: number;
-    }>;
-}, "strip", z.ZodTypeAny, {
-    meter: {
-        meterType: string;
-        currentValue: number;
-        limit: number;
-        periodStart: string;
-        periodEnd: string;
-    };
-    usage: {
-        periodStart: string;
-        periodEnd: string;
-        eventsIngested: number;
-        eventsQueried: number;
-    };
-}, {
-    meter: {
-        meterType: string;
-        currentValue: number;
-        limit: number;
-        periodStart: string;
-        periodEnd: string;
-    };
-    usage: {
-        periodStart: string;
-        periodEnd: string;
-        eventsIngested: number;
-        eventsQueried: number;
-    };
-}>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
 export type UsageResponse = z.infer<typeof usageResponseSchema>;
 //# sourceMappingURL=usage.d.ts.map
